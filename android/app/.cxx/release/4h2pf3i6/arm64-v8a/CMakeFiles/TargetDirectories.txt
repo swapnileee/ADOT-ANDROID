@@ -1,0 +1,2 @@
+C:/Users/swapn/Downloads/ADOT APP/android/app/.cxx/release/4h2pf3i6/arm64-v8a/CMakeFiles/edit_cache.dir
+C:/Users/swapn/Downloads/ADOT APP/android/app/.cxx/release/4h2pf3i6/arm64-v8a/CMakeFiles/rebuild_cache.dir
