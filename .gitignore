@@ -59,3 +59,13 @@ app.*.map.json
 *.iml
 *.ipr
 *.iws
+
+# Dart legacy package resolution file
+.packages
+
+# Generated APKs & App Bundles
+*.apk
+*.aab
+
+# Android memory/heap dump files
+android/*.hprof
