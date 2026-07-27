@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/product_model.dart';
 import '../models/sale_model.dart';
@@ -86,6 +87,22 @@ class SupabaseService {
   static final List<SaleModel> _inMemorySales = [];
   static final List<ExpenseModel> _inMemoryExpenses = [];
 
+  // --- CUSTOMER SYNC ---
+  Future<void> syncCustomer(String customerName) async {
+    if (customerName.trim().isEmpty || customerName.trim() == 'নগদ ক্রেতা') return;
+    try {
+      final client = _client;
+      if (client != null) {
+        await client.from('customers').upsert({
+          'name': customerName.trim(),
+          'last_purchase_at': DateTime.now().toIso8601String(),
+        }, onConflict: 'name');
+      }
+    } catch (e) {
+      debugPrint('Customer sync note: $e');
+    }
+  }
+
   // --- PRODUCTS ---
   Future<List<Product>> fetchProducts() async {
     try {
@@ -98,7 +115,9 @@ class SupabaseService {
           return list;
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Supabase fetchProducts error: $e');
+    }
     return _inMemoryProducts;
   }
 
@@ -109,7 +128,9 @@ class SupabaseService {
       if (client != null) {
         await client.from('products').insert(product.toJson());
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Supabase addProduct error: $e');
+    }
   }
 
   Future<void> updateProduct(Product product) async {
@@ -122,7 +143,9 @@ class SupabaseService {
       if (client != null) {
         await client.from('products').update(product.toJson()).eq('id', product.id);
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Supabase updateProduct error: $e');
+    }
   }
 
   Future<void> updateProductStock(dynamic productId, num newStockInBaseUnit) async {
@@ -160,7 +183,9 @@ class SupabaseService {
           if (client != null) {
             await client.from('products').update(updatedProduct.toJson()).eq('id', productId);
           }
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('Supabase deductVariantStock error: $e');
+        }
       }
     }
   }
@@ -173,7 +198,9 @@ class SupabaseService {
         final response = await client.from('sales').select('*').order('created_at', ascending: false);
         return (response as List).map((json) => SaleModel.fromJson(json)).toList();
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Supabase fetchSales error: $e');
+    }
     return _inMemorySales;
   }
 
@@ -188,7 +215,9 @@ class SupabaseService {
       if (client != null) {
         await client.from('sales').insert(sale.toJson());
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Supabase processSale error: $e');
+    }
   }
 
   /// Process multiple cart items in a single checkout session.
@@ -201,6 +230,8 @@ class SupabaseService {
   }) async {
     final double dueAmount = (totalCartPrice - paidAmount) > 0 ? (totalCartPrice - paidAmount) : 0.0;
 
+    await syncCustomer(customerName);
+
     for (var item in cartItems) {
       final Product product = item['product'] as Product;
       final ProductVariant variant = item['variant'] as ProductVariant;
@@ -208,7 +239,7 @@ class SupabaseService {
       final double itemPrice = (item['totalPrice'] as num).toDouble();
 
       final sale = SaleModel(
-        productName: '${product.name} (${variant.sizeLabel})',
+        productName: '${product.cleanName} (${variant.sizeLabel})',
         variantId: variant.id,
         variantLabel: variant.sizeLabel,
         baseQuantity: qtyCount,
@@ -233,7 +264,9 @@ class SupabaseService {
         if (client != null) {
           await client.from('sales').insert(sale.toJson());
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Supabase sales insert error: $e');
+      }
     }
   }
 
@@ -245,7 +278,9 @@ class SupabaseService {
         final response = await client.from('expenses').select('*').order('created_at', ascending: false);
         return (response as List).map((json) => ExpenseModel.fromJson(json)).toList();
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Supabase fetchExpenses error: $e');
+    }
     return _inMemoryExpenses;
   }
 
@@ -256,7 +291,9 @@ class SupabaseService {
       if (client != null) {
         await client.from('expenses').insert(expense.toJson());
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Supabase addExpense error: $e');
+    }
   }
 
   // --- DASHBOARD METRICS ---

@@ -40,18 +40,20 @@ class SaleModel {
 
     return SaleModel(
       id: json['id'],
-      productName: json['product_name']?.toString() ?? '',
-      variantId: json['variant_id']?.toString(),
-      variantLabel: json['variant_label']?.toString(),
+      productName: json['product_name']?.toString() ?? json['productName']?.toString() ?? '',
+      variantId: json['variant_id']?.toString() ?? json['variantId']?.toString(),
+      variantLabel: json['variant_label']?.toString() ?? json['variantLabel']?.toString(),
       quantity: parsedQty,
       baseQuantity: parsedBaseQty,
       displayQuantityWithUnit: parsedDisplayUnit,
-      totalPrice: (json['total_price'] as num?)?.toDouble() ?? 0.0,
-      customerName: json['customer_name']?.toString() ?? '',
-      paidAmount: (json['paid_amount'] as num?)?.toDouble() ?? 0.0,
-      dueAmount: (json['due_amount'] as num?)?.toDouble() ?? 0.0,
-      paymentMethod: json['payment_method']?.toString() ?? 'Cash',
-      createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString()) : null,
+      totalPrice: (json['total_price'] as num?)?.toDouble() ?? (json['totalPrice'] as num?)?.toDouble() ?? 0.0,
+      customerName: json['customer_name']?.toString() ?? json['customerName']?.toString() ?? '',
+      paidAmount: (json['paid_amount'] as num?)?.toDouble() ?? (json['paidAmount'] as num?)?.toDouble() ?? 0.0,
+      dueAmount: (json['due_amount'] as num?)?.toDouble() ?? (json['dueAmount'] as num?)?.toDouble() ?? 0.0,
+      paymentMethod: json['payment_method']?.toString() ?? json['paymentMethod']?.toString() ?? 'Cash',
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString())
+          : (json['createdAt'] != null ? DateTime.tryParse(json['createdAt'].toString()) : null),
     );
   }
 
