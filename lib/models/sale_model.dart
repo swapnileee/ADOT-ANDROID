@@ -8,6 +8,7 @@ class SaleModel {
   final String displayQuantityWithUnit; // User friendly string (e.g. "1.5 L", "300 g", "3 pcs")
   final double totalPrice;
   final String customerName;
+  final String? customerPhone;
   final double paidAmount;
   final double dueAmount;
   final String paymentMethod;
@@ -23,6 +24,7 @@ class SaleModel {
     String? displayQuantityWithUnit,
     required this.totalPrice,
     required this.customerName,
+    this.customerPhone,
     required this.paidAmount,
     required this.dueAmount,
     this.paymentMethod = 'Cash',
@@ -51,6 +53,7 @@ class SaleModel {
           (json['totalPrice'] as num?)?.toDouble() ??
           0.0,
       customerName: json['customer_name']?.toString() ?? json['customerName']?.toString() ?? '',
+      customerPhone: json['customer_phone']?.toString() ?? json['customerPhone']?.toString(),
       paidAmount: (json['paid_amount'] as num?)?.toDouble() ?? (json['paidAmount'] as num?)?.toDouble() ?? 0.0,
       dueAmount: (json['due_amount'] as num?)?.toDouble() ?? (json['dueAmount'] as num?)?.toDouble() ?? 0.0,
       paymentMethod: json['payment_method']?.toString() ?? json['paymentMethod']?.toString() ?? 'Cash',
@@ -71,6 +74,7 @@ class SaleModel {
       'total_price': totalPrice,
       'total_amount': totalPrice,
       'customer_name': customerName,
+      'customer_phone': customerPhone,
       'paid_amount': paidAmount,
       'due_amount': dueAmount,
       'payment_status': dueAmount > 0 ? 'due' : 'paid',

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'dashboard_screen.dart';
 import 'inventory_screen.dart';
 import 'pos_screen.dart';
-import 'report_screen.dart';
+import 'orders_screen.dart';
 import 'expenses_screen.dart';
 import '../widgets/app_drawer.dart';
 import '../theme/app_theme.dart';
@@ -32,7 +32,7 @@ class _MainScreenState extends State<MainScreen> {
       ),
       const InventoryScreen(),
       const POSScreen(),
-      const ReportScreen(),
+      const OrdersScreen(),
       const ExpensesScreen(),
     ];
 

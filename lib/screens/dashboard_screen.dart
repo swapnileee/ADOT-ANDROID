@@ -33,6 +33,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isRecentSalesExpanded = false;
   double _todaySales = 0.0;
   double _todayExpenses = 0.0;
+  double _todayNetProfit = 0.0;
   double _totalDue = 0.0;
   int _totalProducts = 0;
   int _lowStockCount = 0;
@@ -78,6 +79,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         _todaySales = stats['todaySales'] ?? 0.0;
         _todayExpenses = stats['todayExpenses'] ?? 0.0;
+        _todayNetProfit = (stats['todayNetProfit'] as num?)?.toDouble() ?? (_todaySales - _todayExpenses - (_todaySales * 0.70));
         _totalDue = stats['totalDue'] ?? 0.0;
         _totalProducts = stats['totalProducts'] ?? 0;
         _lowStockCount = stats['lowStockCount'] ?? 0;
@@ -406,6 +408,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           icon: Icons.account_balance_wallet_rounded,
                           iconBgColor: const Color(0xFFFCE8E6),
                           iconColor: AppTheme.errorRed,
+                        ),
+                        StatCard(
+                          title: "আজকের নিট লাভ",
+                          value: "৳ ${_todayNetProfit.toStringAsFixed(0)}",
+                          subtitle: _todayNetProfit >= 0 ? "আজকের অর্জিত নিট লাভ" : "আজকের লোকসান/ক্ষতি",
+                          icon: Icons.monetization_on_rounded,
+                          iconBgColor: _todayNetProfit >= 0 ? const Color(0xFFE6F4EA) : const Color(0xFFFCE8E6),
+                          iconColor: _todayNetProfit >= 0 ? AppTheme.primaryGreen : AppTheme.errorRed,
                         ),
                         StatCard(
                           title: "হাতে নগদ ক্যাশ",

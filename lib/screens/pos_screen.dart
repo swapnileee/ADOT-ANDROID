@@ -45,6 +45,7 @@ class _POSScreenState extends State<POSScreen> {
   double _paidAmount = 0.0;
 
   final TextEditingController _customerNameController = TextEditingController();
+  final TextEditingController _customerPhoneController = TextEditingController();
   final TextEditingController _paidAmountController = TextEditingController();
 
   bool _isLoadingProducts = true;
@@ -64,7 +65,7 @@ class _POSScreenState extends State<POSScreen> {
   final List<String> _paymentMethods = [
     'নগদ',
     'বিকাশ',
-    'নগদ ডিজি',
+    'ব্যাংক',
     'বকেয়া',
   ];
 
@@ -77,6 +78,7 @@ class _POSScreenState extends State<POSScreen> {
   @override
   void dispose() {
     _customerNameController.dispose();
+    _customerPhoneController.dispose();
     _paidAmountController.dispose();
     super.dispose();
   }
@@ -277,6 +279,7 @@ class _POSScreenState extends State<POSScreen> {
 
     try {
       final customerName = _customerNameController.text.trim().isEmpty ? 'নগদ ক্রেতা' : _customerNameController.text.trim();
+      final customerPhone = _customerPhoneController.text.trim().isEmpty ? null : _customerPhoneController.text.trim();
 
       final List<Map<String, dynamic>> payload = _cartItems.map((item) {
         return {
@@ -290,6 +293,7 @@ class _POSScreenState extends State<POSScreen> {
       await _supabaseService.processCartCheckout(
         cartItems: payload,
         customerName: customerName,
+        customerPhone: customerPhone,
         paidAmount: _paidAmount,
         totalCartPrice: _cartTotal,
         paymentMethod: _selectedPaymentMethod,
@@ -321,6 +325,7 @@ class _POSScreenState extends State<POSScreen> {
 
   void _resetCartAndForm() {
     _customerNameController.clear();
+    _customerPhoneController.clear();
     _paidAmountController.clear();
     setState(() {
       _cartItems.clear();
@@ -502,8 +507,8 @@ class _POSScreenState extends State<POSScreen> {
               padding: EdgeInsets.only(
                 left: 16,
                 right: 16,
-                top: 20,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                top: 16,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
               ),
               child: SingleChildScrollView(
                 child: Form(
@@ -512,7 +517,7 @@ class _POSScreenState extends State<POSScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Header Row
+                      // Header Row (FIXED TOP)
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -553,10 +558,14 @@ class _POSScreenState extends State<POSScreen> {
                         ],
                       ),
 
-                      const Divider(height: 16),
+                      const Divider(height: 12),
 
-                      // Cart Items List
-                      _cartItems.isEmpty
+                      // Cart Items List (INDEPENDENTLY SCROLLABLE MIDDLE CONTAINER)
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          maxHeight: 180,
+                        ),
+                      child: _cartItems.isEmpty
                           ? const Padding(
                               padding: EdgeInsets.all(24.0),
                               child: Center(
@@ -568,7 +577,6 @@ class _POSScreenState extends State<POSScreen> {
                             )
                           : ListView.builder(
                               shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
                               itemCount: _cartItems.length,
                               itemBuilder: (context, index) {
                                 final item = _cartItems[index];
@@ -650,13 +658,14 @@ class _POSScreenState extends State<POSScreen> {
                                 );
                               },
                             ),
+                    ),
 
-                      const SizedBox(height: 12),
+                    const SizedBox(height: 10),
 
-                      // Checkout Inputs Container with Payment Method Selection
-                      Card(
-                        color: Colors.white,
-                        child: Padding(
+                    // Checkout Inputs Container with Payment Method Selection (FIXED BOTTOM)
+                    Card(
+                      color: Colors.white,
+                      child: Padding(
                           padding: const EdgeInsets.all(14.0),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -713,6 +722,15 @@ class _POSScreenState extends State<POSScreen> {
                                 decoration: const InputDecoration(
                                   labelText: 'ক্রেতার নাম (ঐচ্ছিক)',
                                   prefixIcon: Icon(Icons.person_outline_rounded, color: AppTheme.primaryGreen),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              TextFormField(
+                                controller: _customerPhoneController,
+                                keyboardType: TextInputType.phone,
+                                decoration: const InputDecoration(
+                                  labelText: 'ক্রেতার মোবাইল নম্বর (ঐচ্ছিক)',
+                                  prefixIcon: Icon(Icons.phone_rounded, color: AppTheme.primaryGreen),
                                 ),
                               ),
                               const SizedBox(height: 10),

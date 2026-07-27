@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../services/supabase_service.dart';
 import '../services/pdf_report_service.dart';
@@ -376,50 +375,6 @@ class _ReportScreenState extends State<ReportScreen> {
                         ),
                       ],
                     ),
-
-                    const SizedBox(height: 24),
-
-                    const Text(
-                      'সাম্প্রতিক বিক্রি ও অর্ডারের সারসংক্ষেপ',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textDark),
-                    ),
-                    const SizedBox(height: 10),
-
-                    _salesList.isEmpty
-                        ? const Card(
-                            child: Padding(
-                              padding: EdgeInsets.all(24.0),
-                              child: Center(
-                                child: Text('কোন বিক্রি রেকর্ড পাওয়া যায়নি', style: TextStyle(color: AppTheme.textMuted)),
-                              ),
-                            ),
-                          )
-                        : ListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: _salesList.take(5).length,
-                            itemBuilder: (context, index) {
-                              final sale = _salesList[index];
-                              final dateStr = sale.createdAt != null
-                                  ? DateFormat('dd MMM yyyy').format(sale.createdAt!)
-                                  : 'আজ';
-                              return Card(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                child: ListTile(
-                                  leading: const CircleAvatar(
-                                    backgroundColor: Color(0xFFE6F4EA),
-                                    child: Icon(Icons.point_of_sale_rounded, color: AppTheme.primaryGreen),
-                                  ),
-                                  title: Text(sale.productName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                  subtitle: Text('ক্রেতা: ${sale.customerName} • তারিখ: $dateStr', style: const TextStyle(fontSize: 12)),
-                                  trailing: Text(
-                                    '৳ ${sale.totalPrice.toStringAsFixed(0)}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryGreen),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
                   ],
                 ),
               ),

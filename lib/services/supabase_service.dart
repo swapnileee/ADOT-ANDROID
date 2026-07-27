@@ -88,15 +88,19 @@ class SupabaseService {
   static final List<ExpenseModel> _inMemoryExpenses = [];
 
   // --- CUSTOMER SYNC ---
-  Future<void> syncCustomer(String customerName) async {
+  Future<void> syncCustomer(String customerName, {String? customerPhone}) async {
     if (customerName.trim().isEmpty || customerName.trim() == 'নগদ ক্রেতা') return;
     try {
       final client = _client;
       if (client != null) {
-        await client.from('customers').upsert({
+        final data = <String, dynamic>{
           'name': customerName.trim(),
           'last_purchase_at': DateTime.now().toIso8601String(),
-        }, onConflict: 'name');
+        };
+        if (customerPhone != null && customerPhone.trim().isNotEmpty) {
+          data['phone'] = customerPhone.trim();
+        }
+        await client.from('customers').upsert(data, onConflict: 'name');
       }
     } catch (e) {
       debugPrint('Customer sync note: $e');
@@ -229,13 +233,14 @@ class SupabaseService {
   Future<void> processCartCheckout({
     required List<Map<String, dynamic>> cartItems,
     required String customerName,
+    String? customerPhone,
     required double paidAmount,
     required double totalCartPrice,
     String paymentMethod = 'Cash',
   }) async {
     final double dueAmount = (totalCartPrice - paidAmount) > 0 ? (totalCartPrice - paidAmount) : 0.0;
 
-    await syncCustomer(customerName);
+    await syncCustomer(customerName, customerPhone: customerPhone);
 
     for (var item in cartItems) {
       final Product product = item['product'] as Product;
@@ -251,6 +256,7 @@ class SupabaseService {
         displayQuantityWithUnit: '$qtyCount × ${variant.sizeLabel}',
         totalPrice: itemPrice,
         customerName: customerName,
+        customerPhone: customerPhone,
         paidAmount: paidAmount > itemPrice ? itemPrice : paidAmount,
         dueAmount: dueAmount,
         paymentMethod: paymentMethod,
@@ -292,6 +298,58 @@ class SupabaseService {
     }
   }
 
+  /// Update due amount and paid amount for an existing sale
+  Future<void> updateSaleDue({
+    required dynamic saleId,
+    required double newPaidAmount,
+    required double newDueAmount,
+  }) async {
+    final cleanDue = newDueAmount < 0 ? 0.0 : newDueAmount;
+    final status = cleanDue <= 0 ? 'paid' : 'due';
+
+    final index = _inMemorySales.indexWhere((s) => s.id.toString() == saleId.toString());
+    if (index >= 0) {
+      final old = _inMemorySales[index];
+      _inMemorySales[index] = SaleModel(
+        id: old.id,
+        productName: old.productName,
+        variantId: old.variantId,
+        variantLabel: old.variantLabel,
+        quantity: old.quantity,
+        baseQuantity: old.baseQuantity,
+        displayQuantityWithUnit: old.displayQuantityWithUnit,
+        totalPrice: old.totalPrice,
+        customerName: old.customerName,
+        paidAmount: newPaidAmount,
+        dueAmount: cleanDue,
+        paymentMethod: old.paymentMethod,
+        createdAt: old.createdAt,
+      );
+    }
+
+    try {
+      final client = _client;
+      if (client != null && saleId != null) {
+        try {
+          await client.from('sales').update({
+            'paid_amount': newPaidAmount,
+            'due_amount': cleanDue,
+            'payment_status': status,
+          }).eq('id', saleId);
+        } catch (_) {
+          await client.from('orders').update({
+            'paid_amount': newPaidAmount,
+            'due_amount': cleanDue,
+            'payment_status': status,
+          }).eq('id', saleId);
+        }
+      }
+    } catch (e) {
+      debugPrint('Supabase updateSaleDue error: $e');
+      rethrow;
+    }
+  }
+
   // --- EXPENSES ---
   Future<List<ExpenseModel>> fetchExpenses() async {
     try {
@@ -326,12 +384,15 @@ class SupabaseService {
 
     final now = DateTime.now();
     double todaySalesTotal = 0.0;
+    double todayCogsTotal = 0.0;
+
     for (var sale in salesList) {
       if (sale.createdAt != null &&
           sale.createdAt!.year == now.year &&
           sale.createdAt!.month == now.month &&
           sale.createdAt!.day == now.day) {
         todaySalesTotal += sale.totalPrice;
+        todayCogsTotal += (sale.totalPrice * 0.70);
       }
     }
 
@@ -355,9 +416,12 @@ class SupabaseService {
       if (p.isLowStock) lowStockCount++;
     }
 
+    double todayNetProfit = todaySalesTotal - todayExpensesTotal - todayCogsTotal;
+
     return {
       'todaySales': todaySalesTotal,
       'todayExpenses': todayExpensesTotal,
+      'todayNetProfit': todayNetProfit,
       'totalDue': totalDue,
       'totalProducts': productsList.length,
       'lowStockCount': lowStockCount,

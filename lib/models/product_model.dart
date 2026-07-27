@@ -77,6 +77,7 @@ class Product {
   // Backwards compatibility getters:
   double get sellingPrice => minPrice;
   double get buyingPrice => minPrice * 0.75;
+  double get unitProfit => sellingPrice - buyingPrice;
   int get stockQuantity => totalStock.toInt();
   double get stockInBaseUnit => totalStock;
   double get baseUnitPrice => minPrice;

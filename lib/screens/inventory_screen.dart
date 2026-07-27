@@ -338,11 +338,36 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                                     ),
                                                   ],
                                                 ),
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  'সরবরাহকারী: ${product.supplier}',
-                                                  style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
-                                                ),
+                                                 const SizedBox(height: 4),
+                                                 Row(
+                                                   children: [
+                                                     Text(
+                                                       'কেনা: ৳${product.buyingPrice.toStringAsFixed(0)}',
+                                                       style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                                                     ),
+                                                     const SizedBox(width: 6),
+                                                     Text(
+                                                       'বেচা: ৳${product.sellingPrice.toStringAsFixed(0)}',
+                                                       style: const TextStyle(fontSize: 11, color: AppTheme.textDark, fontWeight: FontWeight.w600),
+                                                     ),
+                                                     const SizedBox(width: 6),
+                                                     Container(
+                                                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                       decoration: BoxDecoration(
+                                                         color: AppTheme.primaryGreen.withValues(alpha: 0.12),
+                                                         borderRadius: BorderRadius.circular(6),
+                                                       ),
+                                                       child: Text(
+                                                         'লাভ: ৳${product.unitProfit.toStringAsFixed(0)}',
+                                                         style: const TextStyle(
+                                                           fontSize: 11,
+                                                           fontWeight: FontWeight.bold,
+                                                           color: AppTheme.primaryGreen,
+                                                         ),
+                                                       ),
+                                                     ),
+                                                   ],
+                                                 ),
                                               ],
                                             ),
                                           ),

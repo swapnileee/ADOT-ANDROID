@@ -6,6 +6,7 @@ import '../widgets/custom_snackbar.dart';
 import '../theme/app_theme.dart';
 import '../screens/report_screen.dart';
 import '../screens/low_stock_screen.dart';
+import '../screens/dues_screen.dart';
 
 class AppDrawer extends StatefulWidget {
   final int currentTab;
@@ -222,8 +223,8 @@ class _AppDrawerState extends State<AppDrawer> {
                   activeIcon: Icons.menu_book_rounded,
                   title: 'বকেয়া খাতা',
                   subtitle: 'গ্রাহকদের বকেয়া ও বাকি খাতা',
-                  isSelected: widget.currentTab == 3,
-                  onTap: () => _selectTab(3),
+                  isSelected: false,
+                  onTap: () => _navigateToScreen(const DuesScreen()),
                 ),
                 _buildDrawerCardItem(
                   icon: Icons.receipt_long_outlined,
