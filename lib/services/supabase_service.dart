@@ -20,10 +20,18 @@ class SupabaseService {
     await _client.from('products').insert(product.toJson());
   }
 
-  Future<void> updateProductStock(dynamic productId, int newStock) async {
+  Future<void> updateProduct(ProductModel product) async {
+    if (product.id == null) return;
+    await _client.from('products').update(product.toJson()).eq('id', product.id);
+  }
+
+  Future<void> updateProductStock(dynamic productId, num newStockInBaseUnit) async {
     await _client
         .from('products')
-        .update({'stock_quantity': newStock})
+        .update({
+          'stock_in_base_unit': newStockInBaseUnit.toDouble(),
+          'stock_quantity': newStockInBaseUnit.toInt(),
+        })
         .eq('id', productId);
   }
 
@@ -40,18 +48,51 @@ class SupabaseService {
   Future<void> processSale({
     required SaleModel sale,
     required dynamic productId,
-    required int currentStock,
+    required double currentStockInBaseUnit,
   }) async {
-    if (currentStock < sale.quantity) {
-      throw Exception("পর্যাপ্ত স্টক নেই! বর্তমান স্টক: $currentStock");
+    if (currentStockInBaseUnit < sale.baseQuantity) {
+      throw Exception("পর্যাপ্ত স্টক নেই! বর্তমান স্টক: $currentStockInBaseUnit");
     }
 
     // 1. Record sale
     await _client.from('sales').insert(sale.toJson());
 
     // 2. Deduct stock
-    final updatedStock = currentStock - sale.quantity;
+    final updatedStock = currentStockInBaseUnit - sale.baseQuantity;
     await updateProductStock(productId, updatedStock);
+  }
+
+  /// Process multiple cart items in a single checkout session.
+  Future<void> processCartCheckout({
+    required List<Map<String, dynamic>> cartItems,
+    required String customerName,
+    required double paidAmount,
+    required double totalCartPrice,
+  }) async {
+    final double dueAmount = (totalCartPrice - paidAmount) > 0 ? (totalCartPrice - paidAmount) : 0.0;
+
+    for (var item in cartItems) {
+      final ProductModel product = item['product'] as ProductModel;
+      final double baseQty = (item['baseQuantity'] as num).toDouble();
+      final String displayQtyWithUnit = item['displayQtyWithUnit'].toString();
+      final double itemPrice = (item['totalPrice'] as num).toDouble();
+
+      final sale = SaleModel(
+        productName: product.name,
+        baseQuantity: baseQty,
+        displayQuantityWithUnit: displayQtyWithUnit,
+        totalPrice: itemPrice,
+        customerName: customerName,
+        paidAmount: paidAmount > itemPrice ? itemPrice : paidAmount,
+        dueAmount: dueAmount,
+      );
+
+      await processSale(
+        sale: sale,
+        productId: product.id,
+        currentStockInBaseUnit: product.stockInBaseUnit,
+      );
+    }
   }
 
   // --- EXPENSES ---
@@ -108,14 +149,13 @@ class SupabaseService {
     // 4. Total Product Count & Low Stock Count
     final productsResponse = await _client
         .from('products')
-        .select('id, stock_quantity');
+        .select('*');
 
-    final productsList = productsResponse as List;
+    final productsList = (productsResponse as List).map((json) => ProductModel.fromJson(json)).toList();
     final totalProducts = productsList.length;
     int lowStockCount = 0;
-    for (var row in productsList) {
-      final stock = (row['stock_quantity'] as num?)?.toInt() ?? 0;
-      if (stock <= 5) lowStockCount++;
+    for (var product in productsList) {
+      if (product.isLowStock) lowStockCount++;
     }
 
     return {

@@ -7,9 +7,9 @@ import '../widgets/custom_snackbar.dart';
 import '../widgets/speed_dial_fab.dart';
 import '../models/sale_model.dart';
 import '../models/expense_model.dart';
-import '../models/product_model.dart';
 import '../theme/app_theme.dart';
 import 'universal_search_screen.dart';
+import 'add_product_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final VoidCallback onNavigateToPOS;
@@ -193,168 +193,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  void _showAddProductModal() {
-    final formKey = GlobalKey<FormState>();
-    final nameController = TextEditingController();
-    final categoryController = TextEditingController();
-    final buyingPriceController = TextEditingController();
-    final sellingPriceController = TextEditingController();
-    final stockController = TextEditingController();
-    bool isSubmitting = false;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppTheme.creamBg,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+  Future<void> _showAddProductModal() async {
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const AddProductScreen(),
       ),
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                left: 20,
-                right: 20,
-                top: 24,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-              ),
-              child: SingleChildScrollView(
-                child: Form(
-                  key: formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'নতুন পণ্য যোগ করুন',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.primaryGreen,
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.close),
-                            onPressed: () => Navigator.pop(context),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: nameController,
-                        decoration: const InputDecoration(
-                          labelText: 'পণ্যের নাম *',
-                          prefixIcon: Icon(Icons.shopping_bag_outlined, color: AppTheme.primaryGreen),
-                        ),
-                        validator: (val) => val == null || val.trim().isEmpty ? 'পণ্যের নাম দিন' : null,
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: categoryController,
-                        decoration: const InputDecoration(
-                          labelText: 'ক্যাটাগরি (যেমন: মুদি, স্টেশনারি)',
-                          prefixIcon: Icon(Icons.category_outlined, color: AppTheme.primaryGreen),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextFormField(
-                              controller: buyingPriceController,
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                labelText: 'ক্রয় মূল্য (৳) *',
-                              ),
-                              validator: (val) {
-                                if (val == null || val.trim().isEmpty) return 'ক্রয় মূল্য দিন';
-                                if (double.tryParse(val.trim()) == null) return 'সঠিক সংখ্যা';
-                                return null;
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: TextFormField(
-                              controller: sellingPriceController,
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                labelText: 'বিক্রয় মূল্য (৳) *',
-                              ),
-                              validator: (val) {
-                                if (val == null || val.trim().isEmpty) return 'বিক্রয় মূল্য দিন';
-                                if (double.tryParse(val.trim()) == null) return 'সঠিক সংখ্যা';
-                                return null;
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: stockController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'স্টক পরিমাণ (টি) *',
-                          prefixIcon: Icon(Icons.inventory_rounded, color: AppTheme.primaryGreen),
-                        ),
-                        validator: (val) {
-                          if (val == null || val.trim().isEmpty) return 'স্টক পরিমাণ দিন';
-                          if (int.tryParse(val.trim()) == null) return 'সঠিক সংখ্যা';
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 20),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 48,
-                        child: ElevatedButton(
-                          onPressed: isSubmitting
-                              ? null
-                              : () async {
-                                  if (!formKey.currentState!.validate()) return;
-                                  setModalState(() => isSubmitting = true);
-                                  try {
-                                    final product = ProductModel(
-                                      name: nameController.text.trim(),
-                                      category: categoryController.text.trim().isEmpty ? 'সাধারণ' : categoryController.text.trim(),
-                                      buyingPrice: double.parse(buyingPriceController.text.trim()),
-                                      sellingPrice: double.parse(sellingPriceController.text.trim()),
-                                      stockQuantity: int.parse(stockController.text.trim()),
-                                    );
-                                    await _supabaseService.addProduct(product);
-                                    if (!context.mounted) return;
-                                    CustomSnackBar.showSuccess(context, 'পণ্য সফলভাবে সংরক্ষিত হয়েছে!');
-                                    Navigator.pop(context);
-                                    _loadDashboardData();
-                                  } catch (e) {
-                                    if (!context.mounted) return;
-                                    CustomSnackBar.showError(context, 'পণ্য যোগ করতে ত্রুটি: $e');
-                                  } finally {
-                                    setModalState(() => isSubmitting = false);
-                                  }
-                                },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.primaryGreen,
-                          ),
-                          child: isSubmitting
-                              ? const SpinKitThreeBounce(color: Colors.white, size: 20)
-                              : const Text('পণ্য প্রস্তুত ও সংরক্ষণ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
     );
+    if (result == true) {
+      _loadDashboardData();
+    }
   }
 
   @override

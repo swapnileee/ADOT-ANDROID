@@ -166,7 +166,7 @@ class PdfReportService {
                     return pw.TableRow(
                       children: [
                         pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(sale.productName, style: pw.TextStyle(font: banglaFont, fontSize: 9))),
-                        pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('${sale.quantity}টি', style: pw.TextStyle(font: banglaFont, fontSize: 9))),
+                        pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(sale.displayQuantityWithUnit, style: pw.TextStyle(font: banglaFont, fontSize: 9))),
                         pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(sale.customerName.isEmpty ? 'নগদ' : sale.customerName, style: pw.TextStyle(font: banglaFont, fontSize: 9))),
                         pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('৳ ${sale.totalPrice.toStringAsFixed(0)}', style: pw.TextStyle(font: banglaFont, fontSize: 9))),
                         pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('৳ ${sale.dueAmount.toStringAsFixed(0)}', style: pw.TextStyle(font: banglaFont, fontSize: 9))),

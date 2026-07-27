@@ -1,7 +1,9 @@
 class SaleModel {
   final dynamic id;
   final String productName;
-  final int quantity;
+  final int quantity; // Integer base quantity representation for legacy compat
+  final double baseQuantity; // Exact quantity in base unit (e.g. 1500 g, 1.5 L, 3 pcs)
+  final String displayQuantityWithUnit; // User friendly string (e.g. "1.5 L", "300 g", "3 pcs")
   final double totalPrice;
   final String customerName;
   final double paidAmount;
@@ -11,19 +13,31 @@ class SaleModel {
   SaleModel({
     this.id,
     required this.productName,
-    required this.quantity,
+    int? quantity,
+    double? baseQuantity,
+    String? displayQuantityWithUnit,
     required this.totalPrice,
     required this.customerName,
     required this.paidAmount,
     required this.dueAmount,
     this.createdAt,
-  });
+  })  : baseQuantity = baseQuantity ?? (quantity ?? 1).toDouble(),
+        quantity = (baseQuantity ?? quantity ?? 1).toInt(),
+        displayQuantityWithUnit = displayQuantityWithUnit ?? '${quantity ?? 1}টি';
 
   factory SaleModel.fromJson(Map<String, dynamic> json) {
+    final double parsedBaseQty = (json['base_quantity'] as num?)?.toDouble() ??
+        (json['quantity'] as num?)?.toDouble() ??
+        1.0;
+    final int parsedQty = (json['quantity'] as num?)?.toInt() ?? parsedBaseQty.toInt();
+    final String parsedDisplayUnit = json['display_quantity_with_unit']?.toString() ?? '$parsedQtyটি';
+
     return SaleModel(
       id: json['id'],
       productName: json['product_name']?.toString() ?? '',
-      quantity: (json['quantity'] as num?)?.toInt() ?? 0,
+      quantity: parsedQty,
+      baseQuantity: parsedBaseQty,
+      displayQuantityWithUnit: parsedDisplayUnit,
       totalPrice: (json['total_price'] as num?)?.toDouble() ?? 0.0,
       customerName: json['customer_name']?.toString() ?? '',
       paidAmount: (json['paid_amount'] as num?)?.toDouble() ?? 0.0,
@@ -36,6 +50,8 @@ class SaleModel {
     final Map<String, dynamic> data = {
       'product_name': productName,
       'quantity': quantity,
+      'base_quantity': baseQuantity,
+      'display_quantity_with_unit': displayQuantityWithUnit,
       'total_price': totalPrice,
       'customer_name': customerName,
       'paid_amount': paidAmount,
