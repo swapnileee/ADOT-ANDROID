@@ -50,6 +50,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return 'শুভ সন্ধ্যা!';
   }
 
+  String get _formattedCurrentDate {
+    final now = DateTime.now();
+    return DateFormat('EEEE, d MMMM yyyy').format(now);
+  }
+
   double get _cashInHand {
     final net = _todaySales - _todayExpenses;
     return net > 0 ? net : 0.0;
@@ -286,10 +291,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               )
             : CustomScrollView(
                 slivers: [
-                  // SECTION 1: Welcome Header
+                  // SECTION 1: HEADER (Green Organic Theme, Date, Greeting, Search & Notifications)
                   SliverToBoxAdapter(
                     child: Container(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 22),
                       decoration: const BoxDecoration(
                         color: AppTheme.primaryGreen,
                         borderRadius: BorderRadius.only(
@@ -333,6 +338,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             fontWeight: FontWeight.bold,
                                           ),
                                         ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          _formattedCurrentDate,
+                                          style: const TextStyle(
+                                            color: Colors.white70,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
                                       ],
                                     ),
                                   ],
@@ -366,9 +380,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
 
-                  // SECTION 2: Quick Summary Cards (4 Cards Grid)
+                  // SECTION 2: SUMMARY CARDS (4 Grid Cards with Equal Height & Minimal Shadows)
                   SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 10),
                     sliver: SliverGrid.count(
                       crossAxisCount: 2,
                       mainAxisSpacing: 12,
@@ -411,17 +425,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
 
-                  // SECTION 3: Quick Actions (4 Action Buttons Grid)
+                  // SECTION 3: QUICK ACTIONS (Consistent sizes & comfortable touch targets)
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'কুইক অ্যাকশন (Quick Actions)',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.primaryGreen),
-                          ),
+                          _buildSectionHeader('কুইক অ্যাকশন (Quick Actions)'),
                           const SizedBox(height: 10),
                           Row(
                             children: [
@@ -467,17 +478,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
 
-                  // SECTION 4: Important Alerts Section
+                  // SECTION 4: ALERTS SECTION (Soft colors, rounded cards, clean spacing)
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'জরুরী অ্যালার্ট (Important Alerts)',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.primaryGreen),
-                          ),
+                          _buildSectionHeader('জরুরী অ্যালার্ট (Important Alerts)'),
                           const SizedBox(height: 10),
                           Card(
                             child: Padding(
@@ -493,7 +501,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     },
                                     borderRadius: BorderRadius.circular(10),
                                     child: Padding(
-                                      padding: const EdgeInsets.symmetric(vertical: 4.0),
+                                      padding: const EdgeInsets.symmetric(vertical: 6.0),
                                       child: Row(
                                         children: [
                                           const Icon(Icons.warning_amber_rounded, color: AppTheme.errorRed, size: 22),
@@ -517,7 +525,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     onTap: () => CustomSnackBar.showInfo(context, 'কর্মচারীদের বকেয়া বেতন প্রক্রিয়াধীন'),
                                     borderRadius: BorderRadius.circular(10),
                                     child: const Padding(
-                                      padding: EdgeInsets.symmetric(vertical: 4.0),
+                                      padding: EdgeInsets.symmetric(vertical: 6.0),
                                       child: Row(
                                         children: [
                                           Icon(Icons.badge_outlined, color: AppTheme.warningOrange, size: 22),
@@ -541,7 +549,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     onTap: () => CustomSnackBar.showInfo(context, 'গ্রাহকদের বকেয়া তাগাদা অনুস্মারক পাঠানো হয়েছে'),
                                     borderRadius: BorderRadius.circular(10),
                                     child: const Padding(
-                                      padding: EdgeInsets.symmetric(vertical: 4.0),
+                                      padding: EdgeInsets.symmetric(vertical: 6.0),
                                       child: Row(
                                         children: [
                                           Icon(Icons.mark_email_unread_outlined, color: AppTheme.primaryGreen, size: 22),
@@ -569,22 +577,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
 
-                  // SECTION 5: Recent Sales
-                  const SliverToBoxAdapter(
+                  // SECTION 5: RECENT SALES (Clean card spacing & typography)
+                  SliverToBoxAdapter(
                     child: Padding(
-                      padding: EdgeInsets.fromLTRB(20, 14, 20, 8),
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            'সাম্প্রতিক বিক্রি (Recent Sales)',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.primaryGreen,
-                            ),
-                          ),
-                          Icon(Icons.history_rounded, color: AppTheme.textMuted, size: 20),
+                          _buildSectionHeader('সাম্প্রতিক বিক্রি (Recent Sales)'),
+                          const Icon(Icons.history_rounded, color: AppTheme.textMuted, size: 20),
                         ],
                       ),
                     ),
@@ -657,13 +658,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                         ),
 
-                  // SECTION 6, 7 & 8: Summaries Section Grid/Row
+                  // SECTION 6, 7 & 8: SUMMARY SECTIONS (Inventory, Employee, Expense with matching card style)
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Column(
                         children: [
-                          // SECTION 6: Stock Summary Card
+                          // SECTION 6: Inventory Summary Card
                           Card(
                             child: Padding(
                               padding: const EdgeInsets.all(14.0),
@@ -763,9 +764,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
 
-                  const SliverToBoxAdapter(child: SizedBox(height: 30)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 24)),
                 ],
               ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.bold,
+        color: AppTheme.primaryGreen,
       ),
     );
   }
