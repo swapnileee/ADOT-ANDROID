@@ -4,6 +4,7 @@ import '../services/supabase_service.dart';
 import '../models/product_model.dart';
 import '../widgets/custom_snackbar.dart';
 import '../theme/app_theme.dart';
+import 'add_product_screen.dart';
 
 class PosCartItem {
   final Product product;
@@ -36,6 +37,8 @@ class _POSScreenState extends State<POSScreen> {
   List<Product> _filteredProducts = [];
   String _searchQuery = '';
   String _selectedCategoryFilter = 'সকল';
+  bool _hideOutOfStock = false;
+  String _selectedPaymentMethod = 'নগদ';
 
   final List<PosCartItem> _cartItems = [];
   double _paidAmount = 0.0;
@@ -49,10 +52,19 @@ class _POSScreenState extends State<POSScreen> {
   final List<String> _categories = [
     'সকল',
     'তেল',
-    'শস্য ও ডাল',
     'মধু',
-    'ডিম ও দুধ',
-    'ফল',
+    'ঘি',
+    'মসলা',
+    'চাল',
+    'ডাল',
+    'অন্যান্য',
+  ];
+
+  final List<String> _paymentMethods = [
+    'নগদ',
+    'বিকাশ',
+    'নগদ ডিজি',
+    'বকেয়া',
   ];
 
   @override
@@ -92,6 +104,10 @@ class _POSScreenState extends State<POSScreen> {
       temp = temp.where((p) => p.category.toLowerCase().contains(_selectedCategoryFilter.toLowerCase())).toList();
     }
 
+    if (_hideOutOfStock) {
+      temp = temp.where((p) => p.totalStock > 0).toList();
+    }
+
     if (_searchQuery.trim().isNotEmpty) {
       final q = _searchQuery.trim().toLowerCase();
       temp = temp.where((p) => p.name.toLowerCase().contains(q) || p.category.toLowerCase().contains(q)).toList();
@@ -116,6 +132,16 @@ class _POSScreenState extends State<POSScreen> {
       count += item.quantity;
     }
     return count;
+  }
+
+  int _getProductCartQuantity(Product product) {
+    int total = 0;
+    for (var item in _cartItems) {
+      if (item.product.id == product.id) {
+        total += item.quantity;
+      }
+    }
+    return total;
   }
 
   double get _dueAmount {
@@ -143,7 +169,41 @@ class _POSScreenState extends State<POSScreen> {
       }
       _syncPaidAmount();
     });
-    CustomSnackBar.showSuccess(context, '${cartItem.displayTitle} কার্টে যোগ করা হয়েছে!');
+  }
+
+  void _quickAddDefaultVariant(Product product) {
+    if (product.totalStock <= 0) {
+      CustomSnackBar.showWarning(context, 'পণ্যটির স্টক শেষ!');
+      return;
+    }
+    if (product.variants.length > 1) {
+      _openPosVariantModal(product);
+      return;
+    }
+
+    final variant = product.variants.first;
+    final cartItem = PosCartItem(
+      product: product,
+      variant: variant,
+      quantity: 1,
+      totalPrice: variant.price,
+    );
+    _addToCart(cartItem);
+  }
+
+  void _quickDecrementProduct(Product product) {
+    setState(() {
+      final index = _cartItems.indexWhere((i) => i.product.id == product.id);
+      if (index >= 0) {
+        if (_cartItems[index].quantity > 1) {
+          _cartItems[index].quantity--;
+          _cartItems[index].totalPrice = _cartItems[index].quantity * _cartItems[index].variant.price;
+        } else {
+          _cartItems.removeAt(index);
+        }
+        _syncPaidAmount();
+      }
+    });
   }
 
   void _updateCartItemQuantity(int index, int delta) {
@@ -198,6 +258,7 @@ class _POSScreenState extends State<POSScreen> {
         customerName: customerName,
         paidAmount: _paidAmount,
         totalCartPrice: _cartTotal,
+        paymentMethod: _selectedPaymentMethod,
       );
 
       if (!mounted) return;
@@ -222,6 +283,148 @@ class _POSScreenState extends State<POSScreen> {
       _cartItems.clear();
       _paidAmount = 0.0;
     });
+  }
+
+  void _showLongPressOptionsSheet(Product product) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                product.cleanName,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primaryGreen),
+              ),
+              Text(
+                'ক্যাটেগরি: ${product.category} • স্টক: ${product.formattedStock}',
+                style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
+              ),
+              const Divider(height: 20),
+              ListTile(
+                leading: const Icon(Icons.info_outline_rounded, color: AppTheme.primaryGreen),
+                title: const Text('পণ্য বিবরণী (View Details)'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showProductDetailsDialog(product);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.edit_outlined, color: Color(0xFF2563EB)),
+                title: const Text('পণ্য এডিট (Edit Product)'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final res = await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => AddProductScreen(productToEdit: product)),
+                  );
+                  if (res == true) _loadProducts();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.inventory_2_outlined, color: AppTheme.warningOrange),
+                title: const Text('স্টক আপডেট (Update Stock)'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showQuickUpdateStockDialog(product);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline_rounded, color: AppTheme.errorRed),
+                title: const Text('পণ্য মুছুন (Delete Product)', style: TextStyle(color: AppTheme.errorRed)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _confirmDeleteProduct(product);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showProductDetailsDialog(Product product) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(product.cleanName, style: const TextStyle(color: AppTheme.primaryGreen)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('ক্যাটেগরি: ${product.category}'),
+            Text('সরবরাহকারী: ${product.supplier}'),
+            Text('মোট স্টক: ${product.formattedStock}'),
+            Text('মূল্য পরিসর: ${product.priceRangeText}'),
+            const SizedBox(height: 10),
+            const Text('ভ্যারিয়েন্টসমূহ:', style: TextStyle(fontWeight: FontWeight.bold)),
+            ...product.variants.map((v) => Text('• ${v.sizeLabel}: ৳${v.price.toStringAsFixed(0)} (স্টক: ${v.stock.toInt()})')),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('বন্ধ করুন')),
+        ],
+      ),
+    );
+  }
+
+  void _showQuickUpdateStockDialog(Product product) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('${product.cleanName} - স্টক আপডেট'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'নতুন যোগ করার পরিমাণ (Base Unit)'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('বাতিল')),
+          ElevatedButton(
+            onPressed: () async {
+              final val = double.tryParse(controller.text.trim()) ?? 0;
+              if (val > 0) {
+                await _supabaseService.updateProductStock(product.id, val);
+                if (dialogContext.mounted) {
+                  Navigator.pop(dialogContext);
+                }
+                _loadProducts();
+              }
+            },
+            child: const Text('সংরক্ষণ'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteProduct(Product product) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('পণ্য মুছে ফেলা নিশ্চিত করুন'),
+        content: Text('আপনি কি সত্যিই "${product.cleanName}" ডিলিট করতে চান?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('বাতিল')),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              CustomSnackBar.showSuccess(context, 'পণ্য মুছে ফেলা হয়েছে');
+              _loadProducts();
+            },
+            child: const Text('মুছুন', style: TextStyle(color: AppTheme.errorRed)),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Opens Screen 4: POS Variant Selection Modal
@@ -407,7 +610,7 @@ class _POSScreenState extends State<POSScreen> {
 
                       const SizedBox(height: 12),
 
-                      // Checkout Inputs Container
+                      // Checkout Inputs Container with Payment Method Selection
                       Card(
                         color: Colors.white,
                         child: Padding(
@@ -426,6 +629,42 @@ class _POSScreenState extends State<POSScreen> {
                                 ],
                               ),
                               const Divider(height: 16),
+
+                              // Payment Method Selection Chips
+                              const Text(
+                                'পেমেন্ট মাধ্যম (Payment Method):',
+                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textDark),
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                children: _paymentMethods.map((method) {
+                                  final isSelected = _selectedPaymentMethod == method;
+                                  return Padding(
+                                    padding: const EdgeInsets.only(right: 6.0),
+                                    child: ChoiceChip(
+                                      label: Text(method),
+                                      selected: isSelected,
+                                      selectedColor: AppTheme.primaryGreen,
+                                      backgroundColor: AppTheme.creamBg,
+                                      labelStyle: TextStyle(
+                                        color: isSelected ? Colors.white : AppTheme.textDark,
+                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                        fontSize: 12,
+                                      ),
+                                      onSelected: (val) {
+                                        if (val) {
+                                          setModalState(() {
+                                            _selectedPaymentMethod = method;
+                                          });
+                                        }
+                                      },
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+
+                              const SizedBox(height: 12),
+
                               TextFormField(
                                 controller: _customerNameController,
                                 decoration: const InputDecoration(
@@ -631,12 +870,6 @@ class _POSScreenState extends State<POSScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            '১. পণ্য নির্বাচন করুন (ট্যাপ করুন)',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.primaryGreen),
-          ),
-          const SizedBox(height: 10),
-
           // Search Bar
           TextField(
             onChanged: (val) {
@@ -644,7 +877,7 @@ class _POSScreenState extends State<POSScreen> {
               _applySearch();
             },
             decoration: const InputDecoration(
-              hintText: 'পণ্যের নাম দিয়ে খুঁজুন...',
+              hintText: 'পণ্যের নাম বা ক্যাটেগরি দিয়ে খুঁজুন...',
               prefixIcon: Icon(Icons.search_rounded, color: AppTheme.primaryGreen),
               fillColor: Colors.white,
               filled: true,
@@ -653,7 +886,7 @@ class _POSScreenState extends State<POSScreen> {
 
           const SizedBox(height: 10),
 
-          // Category Chips
+          // Category Chips & Hide Out of Stock Toggle
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -685,9 +918,31 @@ class _POSScreenState extends State<POSScreen> {
             ),
           ),
 
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
 
-          // Product List Cards with Clean Display Names
+          // Checkbox Toggle: Hide Out of Stock Products
+          Row(
+            children: [
+              Checkbox(
+                value: _hideOutOfStock,
+                activeColor: AppTheme.primaryGreen,
+                onChanged: (val) {
+                  setState(() {
+                    _hideOutOfStock = val ?? false;
+                    _applySearch();
+                  });
+                },
+              ),
+              const Text(
+                'স্টক শেষ পণ্য লুকান (Hide Out of Stock)',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textDark),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 10),
+
+          // Product List Cards with Clean Display Names, Circular Add Button, Stock Status, and Inline Quantity Controls
           _filteredProducts.isEmpty
               ? const Padding(
                   padding: EdgeInsets.all(32.0),
@@ -699,46 +954,150 @@ class _POSScreenState extends State<POSScreen> {
                   itemCount: _filteredProducts.length,
                   itemBuilder: (context, index) {
                     final product = _filteredProducts[index];
+                    final cartQty = _getProductCartQuantity(product);
+                    final isOutOfStock = product.totalStock <= 0;
+
+                    // Stock status indicator dot and label
+                    Widget stockStatusBadge;
+                    if (isOutOfStock) {
+                      stockStatusBadge = const Row(
+                        children: [
+                          Icon(Icons.circle, color: AppTheme.errorRed, size: 10),
+                          SizedBox(width: 4),
+                          Text('স্টক শেষ', style: TextStyle(fontSize: 11, color: AppTheme.errorRed, fontWeight: FontWeight.bold)),
+                        ],
+                      );
+                    } else if (product.totalStock <= 5) {
+                      stockStatusBadge = Row(
+                        children: [
+                          const Icon(Icons.circle, color: AppTheme.warningOrange, size: 10),
+                          const SizedBox(width: 4),
+                          Text('কম স্টক (${product.totalStock.toInt()}টি)', style: const TextStyle(fontSize: 11, color: AppTheme.warningOrange, fontWeight: FontWeight.bold)),
+                        ],
+                      );
+                    } else {
+                      stockStatusBadge = Row(
+                        children: [
+                          const Icon(Icons.circle, color: AppTheme.primaryGreen, size: 10),
+                          const SizedBox(width: 4),
+                          Text('ইন স্টক (${product.totalStock.toInt()}টি)', style: const TextStyle(fontSize: 11, color: AppTheme.primaryGreen, fontWeight: FontWeight.w600)),
+                        ],
+                      );
+                    }
+
                     return Card(
                       margin: const EdgeInsets.only(bottom: 10),
-                      child: ListTile(
-                        onTap: () => _openPosVariantModal(product),
-                        leading: Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: AppTheme.lightGreenBg,
-                            borderRadius: BorderRadius.circular(10),
+                      child: InkWell(
+                        onLongPress: () => _showLongPressOptionsSheet(product),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Row(
+                            children: [
+                              // Product Image Container
+                              Container(
+                                width: 50,
+                                height: 50,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.lightGreenBg,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: product.imageUrl.isNotEmpty
+                                      ? Image.network(
+                                          product.imageUrl,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) => const Icon(Icons.eco_rounded, color: AppTheme.primaryGreen),
+                                        )
+                                      : const Icon(Icons.eco_rounded, color: AppTheme.primaryGreen),
+                                ),
+                              ),
+
+                              const SizedBox(width: 12),
+
+                              // Product Info Column (Name, Price, Stock Status ONLY)
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      product.cleanName,
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      product.priceRangeText,
+                                      style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryGreen, fontSize: 13),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    stockStatusBadge,
+                                  ],
+                                ),
+                              ),
+
+                              // Right Action Widget: Circular Add (+) button or Inline Quantity Picker [-] X [+]
+                              if (isOutOfStock)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFEE2E2),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Text('অপ্রাপ্য', style: TextStyle(fontSize: 11, color: AppTheme.errorRed, fontWeight: FontWeight.bold)),
+                                )
+                              else if (cartQty == 0)
+                                InkWell(
+                                  onTap: () => _quickAddDefaultVariant(product),
+                                  borderRadius: BorderRadius.circular(20),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: const BoxDecoration(
+                                      color: AppTheme.primaryGreen,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.add, color: Colors.white, size: 22),
+                                  ),
+                                )
+                              else
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.lightGreenBg,
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: AppTheme.primaryGreen.withValues(alpha: 0.3)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      InkWell(
+                                        onTap: () => _quickDecrementProduct(product),
+                                        borderRadius: BorderRadius.circular(14),
+                                        child: const Padding(
+                                          padding: EdgeInsets.all(4.0),
+                                          child: Icon(Icons.remove, size: 18, color: AppTheme.errorRed),
+                                        ),
+                                      ),
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                        child: Text(
+                                          '$cartQty',
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.primaryGreen),
+                                        ),
+                                      ),
+                                      InkWell(
+                                        onTap: () => _quickAddDefaultVariant(product),
+                                        borderRadius: BorderRadius.circular(14),
+                                        child: const Padding(
+                                          padding: EdgeInsets.all(4.0),
+                                          child: Icon(Icons.add, size: 18, color: AppTheme.primaryGreen),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
                           ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(10),
-                            child: product.imageUrl.isNotEmpty
-                                ? Image.network(
-                                    product.imageUrl,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => const Icon(Icons.eco_rounded, color: AppTheme.primaryGreen),
-                                  )
-                                : const Icon(Icons.eco_rounded, color: AppTheme.primaryGreen),
-                          ),
-                        ),
-                        title: Text(product.cleanName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text(
-                          '${product.variants.length}টি ভ্যারিয়েন্ট | স্টক: ${product.formattedStock}',
-                          style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
-                        ),
-                        trailing: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              product.priceRangeText,
-                              style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryGreen, fontSize: 14),
-                            ),
-                            const Text(
-                              '+ ভ্যারিয়েন্ট বাছুন',
-                              style: TextStyle(fontSize: 11, color: AppTheme.primaryGreen, fontWeight: FontWeight.bold),
-                            ),
-                          ],
                         ),
                       ),
                     );

@@ -197,6 +197,7 @@ class SupabaseService {
     required String customerName,
     required double paidAmount,
     required double totalCartPrice,
+    String paymentMethod = 'Cash',
   }) async {
     final double dueAmount = (totalCartPrice - paidAmount) > 0 ? (totalCartPrice - paidAmount) : 0.0;
 
@@ -216,6 +217,7 @@ class SupabaseService {
         customerName: customerName,
         paidAmount: paidAmount > itemPrice ? itemPrice : paidAmount,
         dueAmount: dueAmount,
+        paymentMethod: paymentMethod,
         createdAt: DateTime.now(),
       );
 

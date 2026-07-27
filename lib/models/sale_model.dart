@@ -10,6 +10,7 @@ class SaleModel {
   final String customerName;
   final double paidAmount;
   final double dueAmount;
+  final String paymentMethod;
   final DateTime? createdAt;
 
   SaleModel({
@@ -24,6 +25,7 @@ class SaleModel {
     required this.customerName,
     required this.paidAmount,
     required this.dueAmount,
+    this.paymentMethod = 'Cash',
     this.createdAt,
   })  : baseQuantity = baseQuantity ?? (quantity ?? 1).toDouble(),
         quantity = (baseQuantity ?? quantity ?? 1).toInt(),
@@ -48,6 +50,7 @@ class SaleModel {
       customerName: json['customer_name']?.toString() ?? '',
       paidAmount: (json['paid_amount'] as num?)?.toDouble() ?? 0.0,
       dueAmount: (json['due_amount'] as num?)?.toDouble() ?? 0.0,
+      paymentMethod: json['payment_method']?.toString() ?? 'Cash',
       createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString()) : null,
     );
   }
@@ -64,6 +67,7 @@ class SaleModel {
       'customer_name': customerName,
       'paid_amount': paidAmount,
       'due_amount': dueAmount,
+      'payment_method': paymentMethod,
     };
     if (id != null) {
       data['id'] = id;
