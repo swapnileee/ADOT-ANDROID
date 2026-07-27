@@ -10,6 +10,7 @@ import '../theme/app_theme.dart';
 import 'universal_search_screen.dart';
 import 'add_product_screen.dart';
 import 'low_stock_screen.dart';
+import 'report_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final VoidCallback onNavigateToPOS;
@@ -29,6 +30,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final SupabaseService _supabaseService = SupabaseService();
 
   bool _isLoading = true;
+  bool _isRecentSalesExpanded = false;
   double _todaySales = 0.0;
   double _todayExpenses = 0.0;
   double _totalDue = 0.0;
@@ -291,7 +293,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               )
             : CustomScrollView(
                 slivers: [
-                  // SECTION 1: HEADER (Green Organic Theme, Date, Greeting, Search & Notifications)
+                  // SECTION 1: HEADER
                   SliverToBoxAdapter(
                     child: Container(
                       padding: const EdgeInsets.fromLTRB(20, 16, 20, 22),
@@ -380,7 +382,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
 
-                  // SECTION 2: SUMMARY CARDS (4 Grid Cards with Equal Height & Minimal Shadows)
+                  // SECTION 2: SUMMARY CARDS
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 20, 16, 10),
                     sliver: SliverGrid.count(
@@ -425,7 +427,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
 
-                  // SECTION 3: QUICK ACTIONS (Consistent sizes & comfortable touch targets)
+                  // SECTION 3: QUICK ACTIONS
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
@@ -478,7 +480,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
 
-                  // SECTION 4: ALERTS SECTION (Soft colors, rounded cards, clean spacing)
+                  // SECTION 4: ALERTS SECTION
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
@@ -577,88 +579,176 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
 
-                  // SECTION 5: RECENT SALES (Clean card spacing & typography)
+                  // SECTION 5: RECENT SALES (Collapsible Summary Card)
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          _buildSectionHeader('সাম্প্রতিক বিক্রি (Recent Sales)'),
-                          const Icon(Icons.history_rounded, color: AppTheme.textMuted, size: 20),
-                        ],
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                      child: Card(
+                        child: Column(
+                          children: [
+                            // Collapsed Header Tap Area
+                            InkWell(
+                              onTap: () {
+                                setState(() {
+                                  _isRecentSalesExpanded = !_isRecentSalesExpanded;
+                                });
+                              },
+                              borderRadius: BorderRadius.circular(16),
+                              child: Padding(
+                                padding: const EdgeInsets.all(14.0),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: const BoxDecoration(
+                                            color: AppTheme.lightGreenBg,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(Icons.shopping_cart_rounded, color: AppTheme.primaryGreen, size: 20),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            const Text(
+                                              '🛒 Recent Sales (সাম্প্রতিক বিক্রি)',
+                                              style: TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.bold,
+                                                color: AppTheme.primaryGreen,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              '৳ ${_todaySales.toStringAsFixed(0)} • ${_recentSales.length}টি বিক্রি আজ',
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                                color: AppTheme.textMuted,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                    AnimatedRotation(
+                                      turns: _isRecentSalesExpanded ? 0.5 : 0.0,
+                                      duration: const Duration(milliseconds: 200),
+                                      child: const Icon(
+                                        Icons.keyboard_arrow_down_rounded,
+                                        color: AppTheme.primaryGreen,
+                                        size: 24,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                            // Expandable Sales List & View All Sales Button
+                            AnimatedCrossFade(
+                              firstChild: const SizedBox.shrink(),
+                              secondChild: Column(
+                                children: [
+                                  const Divider(height: 1),
+                                  _recentSales.isEmpty
+                                      ? const Padding(
+                                          padding: EdgeInsets.all(20.0),
+                                          child: Text(
+                                            'এখনও কোন বিক্রি রেকর্ড পাওয়া যায়নি',
+                                            style: TextStyle(color: AppTheme.textMuted),
+                                          ),
+                                        )
+                                      : ListView.builder(
+                                          shrinkWrap: true,
+                                          physics: const NeverScrollableScrollPhysics(),
+                                          itemCount: _recentSales.length,
+                                          itemBuilder: (context, index) {
+                                            final sale = _recentSales[index];
+                                            final String timeStr = sale.createdAt != null
+                                                ? DateFormat('h:mm a').format(sale.createdAt!)
+                                                : 'আজ';
+
+                                            return Container(
+                                              decoration: const BoxDecoration(
+                                                border: Border(bottom: BorderSide(color: AppTheme.cardBorderColor, width: 0.5)),
+                                              ),
+                                              child: ListTile(
+                                                dense: true,
+                                                leading: CircleAvatar(
+                                                  radius: 16,
+                                                  backgroundColor: AppTheme.primaryGreen.withValues(alpha: 0.1),
+                                                  child: const Icon(Icons.shopping_bag_outlined, color: AppTheme.primaryGreen, size: 18),
+                                                ),
+                                                title: Text(
+                                                  sale.productName,
+                                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                                ),
+                                                subtitle: Text(
+                                                  'গ্রাহক: ${sale.customerName.isEmpty ? "নগদ বিক্রি" : sale.customerName} • $timeStr',
+                                                  style: const TextStyle(fontSize: 11),
+                                                ),
+                                                trailing: Column(
+                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                                  children: [
+                                                    Text(
+                                                      '৳ ${sale.totalPrice.toStringAsFixed(0)}',
+                                                      style: const TextStyle(
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 14,
+                                                        color: AppTheme.primaryGreen,
+                                                      ),
+                                                    ),
+                                                    if (sale.dueAmount > 0)
+                                                      Text(
+                                                        'বকেয়া: ৳ ${sale.dueAmount.toStringAsFixed(0)}',
+                                                        style: const TextStyle(
+                                                          fontSize: 10,
+                                                          color: AppTheme.errorRed,
+                                                          fontWeight: FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                  ],
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                  Padding(
+                                    padding: const EdgeInsets.all(10.0),
+                                    child: SizedBox(
+                                      width: double.infinity,
+                                      child: TextButton.icon(
+                                        onPressed: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(builder: (context) => const ReportScreen()),
+                                          );
+                                        },
+                                        icon: const Icon(Icons.receipt_long_rounded, size: 16, color: AppTheme.primaryGreen),
+                                        label: const Text(
+                                          'সকল বিক্রি দেখুন (View All Sales) >',
+                                          style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryGreen, fontSize: 13),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              crossFadeState: _isRecentSalesExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+                              duration: const Duration(milliseconds: 250),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
 
-                  _recentSales.isEmpty
-                      ? const SliverToBoxAdapter(
-                          child: Padding(
-                            padding: EdgeInsets.all(24.0),
-                            child: Center(
-                              child: Text(
-                                'এখনও কোন বিক্রি রেকর্ড পাওয়া যায়নি',
-                                style: TextStyle(color: AppTheme.textMuted),
-                              ),
-                            ),
-                          ),
-                        )
-                      : SliverList(
-                          delegate: SliverChildBuilderDelegate(
-                            (context, index) {
-                              final sale = _recentSales[index];
-                              final String timeStr = sale.createdAt != null ? DateFormat('h:mm a').format(sale.createdAt!) : 'আজ';
-
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 3.0),
-                                child: Card(
-                                  child: ListTile(
-                                    dense: true,
-                                    leading: CircleAvatar(
-                                      radius: 18,
-                                      backgroundColor: AppTheme.primaryGreen.withValues(alpha: 0.1),
-                                      child: const Icon(Icons.shopping_bag_outlined, color: AppTheme.primaryGreen, size: 20),
-                                    ),
-                                    title: Text(
-                                      sale.productName,
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                    ),
-                                    subtitle: Text(
-                                      'গ্রাহক: ${sale.customerName.isEmpty ? "নগদ বিক্রি" : sale.customerName} • $timeStr',
-                                      style: const TextStyle(fontSize: 11),
-                                    ),
-                                    trailing: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      crossAxisAlignment: CrossAxisAlignment.end,
-                                      children: [
-                                        Text(
-                                          '৳ ${sale.totalPrice.toStringAsFixed(0)}',
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 14,
-                                            color: AppTheme.primaryGreen,
-                                          ),
-                                        ),
-                                        if (sale.dueAmount > 0)
-                                          Text(
-                                            'বকেয়া: ৳ ${sale.dueAmount.toStringAsFixed(0)}',
-                                            style: const TextStyle(
-                                              fontSize: 10,
-                                              color: AppTheme.errorRed,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          )
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                            childCount: _recentSales.length,
-                          ),
-                        ),
-
-                  // SECTION 6, 7 & 8: SUMMARY SECTIONS (Inventory, Employee, Expense with matching card style)
+                  // SECTION 6, 7 & 8: SUMMARY SECTIONS
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
