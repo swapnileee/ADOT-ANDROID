@@ -301,7 +301,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                               crossAxisAlignment: CrossAxisAlignment.start,
                                               children: [
                                                 Text(
-                                                  product.name,
+                                                  product.cleanName,
                                                   style: const TextStyle(
                                                     fontWeight: FontWeight.bold,
                                                     fontSize: 16,

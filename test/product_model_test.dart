@@ -3,6 +3,31 @@ import 'package:adot_shop_app/models/product_model.dart';
 
 void main() {
   group('Variant-Based Product Architecture Tests', () {
+    test('cleanName strips hardcoded weight/volume bracket strings from title', () {
+      final product1 = Product(
+        id: '1',
+        name: 'আখের লাল চিনি (৫০০গ্রাম)',
+        category: 'সাধারণ',
+        supplier: 'ADOT',
+        imageUrl: '',
+        baseUnit: 'g',
+        variants: [],
+      );
+
+      final product2 = Product(
+        id: '2',
+        name: 'আপেল সিডার ভিনেগার (৫০০মি.লি.)',
+        category: 'সাধারণ',
+        supplier: 'ADOT',
+        imageUrl: '',
+        baseUnit: 'ml',
+        variants: [],
+      );
+
+      expect(product1.cleanName, 'আখের লাল চিনি');
+      expect(product2.cleanName, 'আপেল সিডার ভিনেগার');
+    });
+
     test('ProductVariant model instantiates and parses JSON correctly', () {
       final json = {
         'id': 'v_1',

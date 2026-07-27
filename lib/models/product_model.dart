@@ -69,6 +69,11 @@ class Product {
   double get maxPrice => variants.isEmpty ? 0 : variants.map((v) => v.price).reduce((a, b) => a > b ? a : b);
   double get totalStock => variants.fold(0.0, (sum, v) => sum + v.stock);
 
+  /// Clean product title stripped of any hardcoded weight/volume parentheses strings.
+  String get cleanName {
+    return name.replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim();
+  }
+
   // Backwards compatibility getters:
   double get sellingPrice => minPrice;
   double get buyingPrice => minPrice * 0.75;
