@@ -20,6 +20,13 @@ class CountUnitConfig {
   });
 }
 
+class UnitOption {
+  final String value;
+  final String label;
+
+  const UnitOption({required this.value, required this.label});
+}
+
 class UnitConversionService {
   static const CountUnitConfig defaultConfig = CountUnitConfig();
 
@@ -47,16 +54,33 @@ class UnitConversionService {
     }
   }
 
-  /// Available selectable units for a given category.
-  static List<String> getAvailableUnits(UnitCategory category) {
+  /// Available unit options with human-readable labels for POS Dropdown.
+  static List<UnitOption> getAvailableUnitOptions(UnitCategory category) {
     switch (category) {
       case UnitCategory.weight:
-        return ['g', 'kg'];
+        return const [
+          UnitOption(value: 'g', label: 'Gram (g)'),
+          UnitOption(value: 'kg', label: 'Kg (kilogram)'),
+        ];
       case UnitCategory.volume:
-        return ['ml', 'L'];
+        return const [
+          UnitOption(value: 'ml', label: 'ml (milliliter)'),
+          UnitOption(value: 'L', label: 'L (liter)'),
+        ];
       case UnitCategory.count:
-        return ['Piece', 'Packet', 'Dozen', 'Box', 'Carton'];
+        return const [
+          UnitOption(value: 'Piece', label: 'Piece'),
+          UnitOption(value: 'Packet', label: 'Packet'),
+          UnitOption(value: 'Dozen', label: 'Dozen'),
+          UnitOption(value: 'Box', label: 'Box'),
+          UnitOption(value: 'Carton', label: 'Carton'),
+        ];
     }
+  }
+
+  /// Simple string list of unit values for a category.
+  static List<String> getAvailableUnits(UnitCategory category) {
+    return getAvailableUnitOptions(category).map((o) => o.value).toList();
   }
 
   /// Quick quantity options for POS UI based on category.
@@ -104,17 +128,17 @@ class UnitConversionService {
     switch (category) {
       case UnitCategory.weight:
         final normalizedUnit = unit.toLowerCase().trim();
-        if (normalizedUnit == 'kg') {
+        if (normalizedUnit == 'kg' || normalizedUnit.contains('kilogram')) {
           return quantity * 1000.0;
         }
-        return quantity; // g
+        return quantity; // g / gram
 
       case UnitCategory.volume:
-        final normalizedUnit = unit.trim();
-        if (normalizedUnit == 'L' || normalizedUnit.toLowerCase() == 'l' || normalizedUnit.toLowerCase() == 'liter') {
+        final normalizedUnit = unit.trim().toLowerCase();
+        if (normalizedUnit == 'l' || normalizedUnit.contains('liter')) {
           return quantity * 1000.0;
         }
-        return quantity; // ml
+        return quantity; // ml / milliliter
 
       case UnitCategory.count:
         final normalizedUnit = unit.toLowerCase().trim();
@@ -142,14 +166,15 @@ class UnitConversionService {
 
     switch (category) {
       case UnitCategory.weight:
-        if (targetUnit.toLowerCase().trim() == 'kg') {
+        final normalized = targetUnit.trim().toLowerCase();
+        if (normalized == 'kg' || normalized.contains('kilogram')) {
           return baseQuantity / 1000.0;
         }
         return baseQuantity;
 
       case UnitCategory.volume:
         final normalized = targetUnit.trim().toLowerCase();
-        if (normalized == 'l' || normalized == 'liter') {
+        if (normalized == 'l' || normalized.contains('liter')) {
           return baseQuantity / 1000.0;
         }
         return baseQuantity;

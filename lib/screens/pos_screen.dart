@@ -623,7 +623,7 @@ class _PosQuantitySelectorBottomSheetState extends State<_PosQuantitySelectorBot
   @override
   Widget build(BuildContext context) {
     final category = widget.product.unitCategory;
-    final availableUnits = UnitConversionService.getAvailableUnits(category);
+    final availableUnitOptions = UnitConversionService.getAvailableUnitOptions(category);
     final quickOptions = UnitConversionService.getQuickQuantityOptions(category);
 
     return Padding(
@@ -739,10 +739,14 @@ class _PosQuantitySelectorBottomSheetState extends State<_PosQuantitySelectorBot
                         labelText: 'একক (Unit)',
                         prefixIcon: Icon(Icons.tune_rounded, color: AppTheme.primaryGreen),
                       ),
-                      items: availableUnits.map((u) {
+                      items: availableUnitOptions.map((opt) {
                         return DropdownMenuItem<String>(
-                          value: u,
-                          child: Text(u, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          value: opt.value,
+                          child: Text(
+                            opt.label,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         );
                       }).toList(),
                       onChanged: (val) {

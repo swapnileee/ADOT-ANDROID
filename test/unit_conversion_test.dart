@@ -3,6 +3,17 @@ import 'package:adot_shop_app/services/unit_conversion_service.dart';
 
 void main() {
   group('UnitConversionService Tests', () {
+    test('Dynamic Unit Options for Dropdown (Gram, Kg, ml, Liter, Count)', () {
+      final weightOptions = UnitConversionService.getAvailableUnitOptions(UnitCategory.weight);
+      expect(weightOptions.map((o) => o.label), ['Gram (g)', 'Kg (kilogram)']);
+
+      final volumeOptions = UnitConversionService.getAvailableUnitOptions(UnitCategory.volume);
+      expect(volumeOptions.map((o) => o.label), ['ml (milliliter)', 'L (liter)']);
+
+      final countOptions = UnitConversionService.getAvailableUnitOptions(UnitCategory.count);
+      expect(countOptions.map((o) => o.label), ['Piece', 'Packet', 'Dozen', 'Box', 'Carton']);
+    });
+
     test('Weight unit conversion to base unit (grams)', () {
       expect(UnitConversionService.toBaseQuantity(1.5, 'kg', UnitCategory.weight), 1500.0);
       expect(UnitConversionService.toBaseQuantity(300, 'g', UnitCategory.weight), 300.0);
