@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'dashboard_screen.dart';
-import 'pos_screen.dart';
-import 'expenses_screen.dart';
 import 'inventory_screen.dart';
+import 'pos_screen.dart';
+import 'report_screen.dart';
+import 'expenses_screen.dart';
 import '../widgets/app_drawer.dart';
+import '../theme/app_theme.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -25,12 +27,13 @@ class _MainScreenState extends State<MainScreen> {
   Widget build(BuildContext context) {
     final List<Widget> screens = [
       DashboardScreen(
-        onNavigateToPOS: () => _navigateToTab(1),
-        onNavigateToInventory: () => _navigateToTab(3),
+        onNavigateToPOS: () => _navigateToTab(2),
+        onNavigateToInventory: () => _navigateToTab(1),
       ),
-      const POSScreen(),
-      const ExpensesScreen(),
       const InventoryScreen(),
+      const POSScreen(),
+      const ReportScreen(),
+      const ExpensesScreen(),
     ];
 
     return Scaffold(
@@ -43,14 +46,8 @@ class _MainScreenState extends State<MainScreen> {
         children: screens,
       ),
       bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08),
-              blurRadius: 10,
-              offset: const Offset(0, -2),
-            ),
-          ],
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: AppTheme.cardBorderColor, width: 1)),
         ),
         child: SafeArea(
           child: BottomNavigationBar(
@@ -60,31 +57,36 @@ class _MainScreenState extends State<MainScreen> {
                 _currentIndex = index;
               });
             },
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.dashboard_outlined),
-              activeIcon: Icon(Icons.dashboard_rounded),
-              label: 'ড্যাশবোর্ড',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.point_of_sale_outlined),
-              activeIcon: Icon(Icons.point_of_sale_rounded),
-              label: 'পস / বিক্রি',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.receipt_long_outlined),
-              activeIcon: Icon(Icons.receipt_long_rounded),
-              label: 'খরচ',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.inventory_2_outlined),
-              activeIcon: Icon(Icons.inventory_2_rounded),
-              label: 'ইনভেন্টরি',
-            ),
-          ],
+            items: const [
+              BottomNavigationBarItem(
+                icon: Icon(Icons.dashboard_outlined),
+                activeIcon: Icon(Icons.dashboard_rounded),
+                label: 'ড্যাশবোর্ড',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.inventory_2_outlined),
+                activeIcon: Icon(Icons.inventory_2_rounded),
+                label: 'পণ্য',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.point_of_sale_outlined),
+                activeIcon: Icon(Icons.point_of_sale_rounded),
+                label: 'POS',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.receipt_long_outlined),
+                activeIcon: Icon(Icons.receipt_long_rounded),
+                label: 'অর্ডার',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.more_horiz_rounded),
+                activeIcon: Icon(Icons.more_horiz_rounded),
+                label: 'আরও',
+              ),
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
   }
 }

@@ -1,27 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../services/supabase_service.dart';
-import '../services/unit_conversion_service.dart';
 import '../models/product_model.dart';
 import '../widgets/custom_snackbar.dart';
 import '../theme/app_theme.dart';
 
 class PosCartItem {
-  final ProductModel product;
-  final double inputQuantity;
-  final String selectedUnit;
-  final double baseQuantity;
+  final Product product;
+  final ProductVariant variant;
+  final int quantity;
   final double totalPrice;
 
   PosCartItem({
     required this.product,
-    required this.inputQuantity,
-    required this.selectedUnit,
-    required this.baseQuantity,
+    required this.variant,
+    required this.quantity,
     required this.totalPrice,
   });
 
-  String get displayQuantityWithUnit => UnitConversionService.formatQuantityWithUnit(inputQuantity, selectedUnit);
+  String get displayTitle => '${product.name} (${variant.sizeLabel})';
 }
 
 class POSScreen extends StatefulWidget {
@@ -35,18 +32,28 @@ class _POSScreenState extends State<POSScreen> {
   final SupabaseService _supabaseService = SupabaseService();
   final _checkoutFormKey = GlobalKey<FormState>();
 
-  List<ProductModel> _products = [];
-  List<ProductModel> _filteredProducts = [];
+  List<Product> _products = [];
+  List<Product> _filteredProducts = [];
   String _searchQuery = '';
+  String _selectedCategoryFilter = 'সকল';
 
   final List<PosCartItem> _cartItems = [];
-
   double _paidAmount = 0.0;
+
   final TextEditingController _customerNameController = TextEditingController();
   final TextEditingController _paidAmountController = TextEditingController();
 
   bool _isLoadingProducts = true;
   bool _isSubmitting = false;
+
+  final List<String> _categories = [
+    'সকল',
+    'তেল',
+    'শস্য ও ডাল',
+    'মধু',
+    'ডিম ও দুধ',
+    'ফল',
+  ];
 
   @override
   void initState() {
@@ -79,14 +86,20 @@ class _POSScreenState extends State<POSScreen> {
   }
 
   void _applySearch() {
-    if (_searchQuery.isEmpty) {
-      _filteredProducts = List.from(_products);
-    } else {
-      _filteredProducts = _products.where((p) {
-        return p.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-            p.category.toLowerCase().contains(_searchQuery.toLowerCase());
-      }).toList();
+    List<Product> temp = List.from(_products);
+
+    if (_selectedCategoryFilter != 'সকল') {
+      temp = temp.where((p) => p.category.toLowerCase().contains(_selectedCategoryFilter.toLowerCase())).toList();
     }
+
+    if (_searchQuery.trim().isNotEmpty) {
+      final q = _searchQuery.trim().toLowerCase();
+      temp = temp.where((p) => p.name.toLowerCase().contains(q) || p.category.toLowerCase().contains(q)).toList();
+    }
+
+    setState(() {
+      _filteredProducts = temp;
+    });
   }
 
   double get _cartTotal {
@@ -111,8 +124,9 @@ class _POSScreenState extends State<POSScreen> {
 
   void _addToCart(PosCartItem cartItem) {
     setState(() {
-      // Check if product already exists in cart, update it
-      final index = _cartItems.indexWhere((i) => i.product.id == cartItem.product.id);
+      final index = _cartItems.indexWhere(
+        (i) => i.product.id == cartItem.product.id && i.variant.id == cartItem.variant.id,
+      );
       if (index >= 0) {
         _cartItems[index] = cartItem;
       } else {
@@ -120,7 +134,7 @@ class _POSScreenState extends State<POSScreen> {
       }
       _syncPaidAmount();
     });
-    CustomSnackBar.showSuccess(context, '${cartItem.product.name} কার্ডে যোগ করা হয়েছে!');
+    CustomSnackBar.showSuccess(context, '${cartItem.displayTitle} কার্টে যোগ করা হয়েছে!');
   }
 
   void _removeFromCart(int index) {
@@ -141,21 +155,19 @@ class _POSScreenState extends State<POSScreen> {
     setState(() => _isSubmitting = true);
 
     try {
-      final customerName = _customerNameController.text.trim().isEmpty
-          ? 'নগদ ক্রেতা'
-          : _customerNameController.text.trim();
+      final customerName = _customerNameController.text.trim().isEmpty ? 'নগদ ক্রেতা' : _customerNameController.text.trim();
 
-      final List<Map<String, dynamic>> cartPayload = _cartItems.map((item) {
+      final List<Map<String, dynamic>> payload = _cartItems.map((item) {
         return {
           'product': item.product,
-          'baseQuantity': item.baseQuantity,
-          'displayQtyWithUnit': item.displayQuantityWithUnit,
+          'variant': item.variant,
+          'itemQuantity': item.quantity,
           'totalPrice': item.totalPrice,
         };
       }).toList();
 
       await _supabaseService.processCartCheckout(
-        cartItems: cartPayload,
+        cartItems: payload,
         customerName: customerName,
         paidAmount: _paidAmount,
         totalCartPrice: _cartTotal,
@@ -164,10 +176,10 @@ class _POSScreenState extends State<POSScreen> {
       if (!mounted) return;
       CustomSnackBar.showSuccess(context, 'বিক্রি সফলভাবে সম্পন্ন হয়েছে!');
       _resetCartAndForm();
-      _loadProducts(); // Reload stock after sale
+      _loadProducts(); // Refresh stocks
     } catch (e) {
       if (!mounted) return;
-      CustomSnackBar.showError(context, 'বিক্রি প্রক্রিয়া করতে ত্রুটি: $e');
+      CustomSnackBar.showError(context, 'বিক্রি করতে ত্রুটি: $e');
     } finally {
       if (mounted) {
         setState(() => _isSubmitting = false);
@@ -184,8 +196,8 @@ class _POSScreenState extends State<POSScreen> {
     });
   }
 
-  /// Opens the modern Material 3 Smart POS Quantity Selector Bottom Sheet
-  void _openQuantitySelectorBottomSheet(ProductModel product) {
+  /// Opens Screen 4: POS Variant Selection Modal
+  void _openPosVariantModal(Product product) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -193,7 +205,7 @@ class _POSScreenState extends State<POSScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => _PosQuantitySelectorBottomSheet(
+      builder: (context) => _PosVariantSelectionModal(
         product: product,
         onAddToCart: _addToCart,
       ),
@@ -210,7 +222,7 @@ class _POSScreenState extends State<POSScreen> {
           onPressed: () => Scaffold.of(context).openDrawer(),
           tooltip: 'মেনু খুলুন',
         ),
-        title: const Text('স্মার্ট পয়েন্ট অব সেল (POS)'),
+        title: const Text('POS - পয়েন্ট অব সেল'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
@@ -227,68 +239,35 @@ class _POSScreenState extends State<POSScreen> {
                   size: 40.0,
                 ),
               )
-            : _products.isEmpty
-                ? _buildEmptyProductsView()
-                : LayoutBuilder(
-                    builder: (context, constraints) {
-                      final isTablet = constraints.maxWidth > 700;
-                      if (isTablet) {
-                        return Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(flex: 3, child: _buildProductSelectorSection()),
-                            const VerticalDivider(width: 1),
-                            Expanded(flex: 2, child: _buildCartAndCheckoutSection()),
-                          ],
-                        );
-                      }
-                      return SingleChildScrollView(
-                        child: Column(
-                          children: [
-                            _buildProductSelectorSection(),
-                            const Divider(height: 24, thickness: 2),
-                            _buildCartAndCheckoutSection(),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  final isTablet = constraints.maxWidth > 750;
+                  if (isTablet) {
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(flex: 3, child: _buildProductGridSection()),
+                        const VerticalDivider(width: 1),
+                        Expanded(flex: 2, child: _buildCartSection()),
+                      ],
+                    );
+                  }
+                  return SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        _buildProductGridSection(),
+                        const Divider(height: 24, thickness: 2),
+                        _buildCartSection(),
+                      ],
+                    ),
+                  );
+                },
+              ),
       ),
     );
   }
 
-  Widget _buildEmptyProductsView() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.inventory_2_outlined, size: 64, color: AppTheme.textMuted),
-            const SizedBox(height: 16),
-            const Text(
-              'কোন পণ্য পাওয়া যায়নি!',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'বিক্রি করার জন্য ইনভেন্টরি স্ক্রীন থেকে পণ্য যোগ করুন।',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppTheme.textMuted),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _loadProducts,
-              icon: const Icon(Icons.refresh),
-              label: const Text('পুনরায় চেষ্টা করুন'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildProductSelectorSection() {
+  Widget _buildProductGridSection() {
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -299,25 +278,62 @@ class _POSScreenState extends State<POSScreen> {
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.primaryGreen),
           ),
           const SizedBox(height: 10),
+
+          // Search Bar
           TextField(
             onChanged: (val) {
-              setState(() {
-                _searchQuery = val;
-                _applySearch();
-              });
+              _searchQuery = val;
+              _applySearch();
             },
             decoration: const InputDecoration(
-              hintText: 'পণ্যের নাম বা ক্যাটাগরি খুঁজুন...',
+              hintText: 'পণ্যের নাম দিয়ে খুঁজুন...',
               prefixIcon: Icon(Icons.search_rounded, color: AppTheme.primaryGreen),
+              fillColor: Colors.white,
+              filled: true,
             ),
           ),
+
+          const SizedBox(height: 10),
+
+          // Category Chips
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: _categories.map((cat) {
+                final isSelected = _selectedCategoryFilter == cat;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6.0),
+                  child: ChoiceChip(
+                    label: Text(cat),
+                    selected: isSelected,
+                    selectedColor: AppTheme.primaryGreen,
+                    backgroundColor: Colors.white,
+                    labelStyle: TextStyle(
+                      color: isSelected ? Colors.white : AppTheme.textDark,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      fontSize: 12,
+                    ),
+                    onSelected: (selected) {
+                      if (selected) {
+                        setState(() {
+                          _selectedCategoryFilter = cat;
+                          _applySearch();
+                        });
+                      }
+                    },
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+
           const SizedBox(height: 12),
+
+          // Product List / Cards
           _filteredProducts.isEmpty
               ? const Padding(
-                  padding: EdgeInsets.all(24.0),
-                  child: Center(
-                    child: Text('কোন পণ্য পাওয়া যায়নি', style: TextStyle(color: AppTheme.textMuted)),
-                  ),
+                  padding: EdgeInsets.all(32.0),
+                  child: Center(child: Text('কোন পণ্য পাওয়া যায়নি', style: TextStyle(color: AppTheme.textMuted))),
                 )
               : ListView.builder(
                   shrinkWrap: true,
@@ -325,46 +341,44 @@ class _POSScreenState extends State<POSScreen> {
                   itemCount: _filteredProducts.length,
                   itemBuilder: (context, index) {
                     final product = _filteredProducts[index];
-                    final bool isLow = product.isLowStock;
                     return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      elevation: 1.5,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      margin: const EdgeInsets.only(bottom: 10),
                       child: ListTile(
-                        onTap: () => _openQuantitySelectorBottomSheet(product),
-                        leading: CircleAvatar(
-                          backgroundColor: isLow
-                              ? AppTheme.errorRed.withValues(alpha: 0.1)
-                              : AppTheme.primaryGreen.withValues(alpha: 0.1),
-                          child: Icon(
-                            product.unitCategory == UnitCategory.weight
-                                ? Icons.scale_outlined
-                                : product.unitCategory == UnitCategory.volume
-                                    ? Icons.water_drop_outlined
-                                    : Icons.widgets_outlined,
-                            color: isLow ? AppTheme.errorRed : AppTheme.primaryGreen,
+                        onTap: () => _openPosVariantModal(product),
+                        leading: Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: AppTheme.lightGreenBg,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: product.imageUrl.isNotEmpty
+                                ? Image.network(
+                                    product.imageUrl,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => const Icon(Icons.eco_rounded, color: AppTheme.primaryGreen),
+                                  )
+                                : const Icon(Icons.eco_rounded, color: AppTheme.primaryGreen),
                           ),
                         ),
                         title: Text(product.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text(
-                          'ক্যাটাগরি: ${product.category} | স্টক: ${product.formattedStock}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isLow ? AppTheme.errorRed : AppTheme.textMuted,
-                            fontWeight: isLow ? FontWeight.bold : FontWeight.normal,
-                          ),
+                          '${product.variants.length}টি ভ্যারিয়েন্ট | স্টক: ${product.formattedStock}',
+                          style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
                         ),
                         trailing: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Text(
-                              '৳${product.baseUnitPrice.toStringAsFixed(2)}/${product.baseUnit}',
-                              style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryGreen),
+                              product.priceRangeText,
+                              style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryGreen, fontSize: 14),
                             ),
                             const Text(
-                              '+ কার্টে যোগ',
-                              style: TextStyle(fontSize: 11, color: AppTheme.accentGold, fontWeight: FontWeight.bold),
+                              '+ ভ্যারিয়েন্ট বাছুন',
+                              style: TextStyle(fontSize: 11, color: AppTheme.primaryGreen, fontWeight: FontWeight.bold),
                             ),
                           ],
                         ),
@@ -377,7 +391,7 @@ class _POSScreenState extends State<POSScreen> {
     );
   }
 
-  Widget _buildCartAndCheckoutSection() {
+  Widget _buildCartSection() {
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Form(
@@ -396,13 +410,12 @@ class _POSScreenState extends State<POSScreen> {
                   TextButton.icon(
                     onPressed: () => setState(() => _cartItems.clear()),
                     icon: const Icon(Icons.delete_outline, size: 18, color: AppTheme.errorRed),
-                    label: const Text('সব মুছুন', style: TextStyle(color: AppTheme.errorRed, fontSize: 12)),
+                    label: const Text('মুছুন', style: TextStyle(color: AppTheme.errorRed, fontSize: 12)),
                   ),
               ],
             ),
             const SizedBox(height: 10),
 
-            // Cart Items List
             _cartItems.isEmpty
                 ? Card(
                     child: Container(
@@ -414,7 +427,7 @@ class _POSScreenState extends State<POSScreen> {
                           SizedBox(height: 8),
                           Text('কার্ট খালি রয়েছে', style: TextStyle(fontWeight: FontWeight.bold)),
                           Text(
-                            'উপরে পণ্য ট্যাপ করে পরিমাণ নির্বাচন করুন।',
+                            'উপরে পণ্য ট্যাপ করে ভ্যারিয়েন্ট ও পরিমাণ নির্বাচন করুন।',
                             style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
                           ),
                         ],
@@ -431,17 +444,17 @@ class _POSScreenState extends State<POSScreen> {
                         margin: const EdgeInsets.only(bottom: 8),
                         child: ListTile(
                           dense: true,
-                          title: Text(item.product.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          title: Text(item.displayTitle, style: const TextStyle(fontWeight: FontWeight.bold)),
                           subtitle: Text(
-                            'পরিমাণ: ${item.displayQuantityWithUnit}',
-                            style: const TextStyle(fontSize: 13, color: AppTheme.primaryGreen, fontWeight: FontWeight.w600),
+                            'পরিমাণ: ${item.quantity}টি × ৳${item.variant.price.toStringAsFixed(0)}',
+                            style: const TextStyle(fontSize: 12, color: AppTheme.primaryGreen, fontWeight: FontWeight.w600),
                           ),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                '৳${item.totalPrice.toStringAsFixed(0)}',
-                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.darkGreen),
+                                '৳ ${item.totalPrice.toStringAsFixed(0)}',
+                                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.primaryGreen),
                               ),
                               IconButton(
                                 icon: const Icon(Icons.remove_circle_outline, color: AppTheme.errorRed, size: 20),
@@ -456,24 +469,17 @@ class _POSScreenState extends State<POSScreen> {
 
             const SizedBox(height: 16),
 
-            // Cart Summary Card
+            // Checkout Summary Card
             Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      '৩. পরিশোধের বিবরণ',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.primaryGreen),
-                    ),
-                    const SizedBox(height: 12),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('সর্বমোট কার্ট মূল্য:', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                        const Text('সর্বমোট মূল্য:', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                         Text(
                           '৳ ${_cartTotal.toStringAsFixed(0)}',
                           style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.primaryGreen),
@@ -486,7 +492,6 @@ class _POSScreenState extends State<POSScreen> {
                       decoration: const InputDecoration(
                         labelText: 'ক্রেতার নাম (ঐচ্ছিক)',
                         prefixIcon: Icon(Icons.person_outline_rounded, color: AppTheme.primaryGreen),
-                        hintText: 'যেমন: রফিকুল ইসলাম',
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -505,16 +510,16 @@ class _POSScreenState extends State<POSScreen> {
                     ),
                     const SizedBox(height: 12),
                     Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: _dueAmount > 0 ? const Color(0xFFFEF7E0) : const Color(0xFFE6F4EA),
+                        color: _dueAmount > 0 ? const Color(0xFFFEF3C7) : AppTheme.lightGreenBg,
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            _dueAmount > 0 ? 'বকেয়া/বাকি পরিমাণ:' : 'পরিশোধের অবস্থা:',
+                            _dueAmount > 0 ? 'বকেয়া পরিমাণ:' : 'পরিশোধের অবস্থা:',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               color: _dueAmount > 0 ? AppTheme.warningOrange : AppTheme.primaryGreen,
@@ -523,7 +528,7 @@ class _POSScreenState extends State<POSScreen> {
                           Text(
                             _dueAmount > 0 ? '৳ ${_dueAmount.toStringAsFixed(0)}' : 'সম্পূর্ণ পরিশোধিত',
                             style: TextStyle(
-                              fontSize: 16,
+                              fontSize: 15,
                               fontWeight: FontWeight.bold,
                               color: _dueAmount > 0 ? AppTheme.warningOrange : AppTheme.primaryGreen,
                             ),
@@ -541,16 +546,16 @@ class _POSScreenState extends State<POSScreen> {
             // Submit Button
             SizedBox(
               width: double.infinity,
-              height: 52,
+              height: 50,
               child: ElevatedButton.icon(
                 onPressed: _isSubmitting || _cartItems.isEmpty ? null : _submitCheckout,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primaryGreen,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                icon: _isSubmitting ? const SizedBox.shrink() : const Icon(Icons.check_circle_rounded, size: 22, color: Colors.white),
+                icon: _isSubmitting ? const SizedBox.shrink() : const Icon(Icons.check_circle_rounded, color: Colors.white),
                 label: _isSubmitting
-                    ? const SpinKitThreeBounce(color: Colors.white, size: 24)
+                    ? const SpinKitThreeBounce(color: Colors.white, size: 22)
                     : const Text(
                         'বিক্রি নিশ্চিত করুন ও ইনভয়েস জমা দিন',
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
@@ -564,356 +569,338 @@ class _POSScreenState extends State<POSScreen> {
   }
 }
 
-/// Material 3 Bottom Sheet for Quantity & Unit Selection (Requirements 3-8)
-class _PosQuantitySelectorBottomSheet extends StatefulWidget {
-  final ProductModel product;
+/// Screen 4: POS Variant Selection Modal Widget (POS - ভ্যারিয়েন্ট নির্বাচন)
+class _PosVariantSelectionModal extends StatefulWidget {
+  final Product product;
   final Function(PosCartItem) onAddToCart;
 
-  const _PosQuantitySelectorBottomSheet({
+  const _PosVariantSelectionModal({
     required this.product,
     required this.onAddToCart,
   });
 
   @override
-  State<_PosQuantitySelectorBottomSheet> createState() => _PosQuantitySelectorBottomSheetState();
+  State<_PosVariantSelectionModal> createState() => _PosVariantSelectionModalState();
 }
 
-class _PosQuantitySelectorBottomSheetState extends State<_PosQuantitySelectorBottomSheet> {
-  final _qtyFormKey = GlobalKey<FormState>();
-  late TextEditingController _quantityInputController;
-
-  late String _selectedUnit;
-  late double _inputQuantity;
+class _PosVariantSelectionModalState extends State<_PosVariantSelectionModal> {
+  late ProductVariant _selectedVariant;
+  int _counterQuantity = 1;
 
   @override
   void initState() {
     super.initState();
-    final availableUnits = UnitConversionService.getAvailableUnits(widget.product.unitCategory);
-    _selectedUnit = availableUnits.first;
-    _inputQuantity = 1.0;
-    _quantityInputController = TextEditingController(text: '1');
-  }
-
-  @override
-  void dispose() {
-    _quantityInputController.dispose();
-    super.dispose();
-  }
-
-  double get _calculatedBaseQuantity {
-    return UnitConversionService.toBaseQuantity(_inputQuantity, _selectedUnit, widget.product.unitCategory);
+    _selectedVariant = widget.product.variants.first;
   }
 
   double get _calculatedTotalPrice {
-    return UnitConversionService.calculateTotalPrice(_calculatedBaseQuantity, widget.product.baseUnitPrice);
+    return _selectedVariant.price * _counterQuantity;
   }
 
   bool get _isStockInsufficient {
-    return _calculatedBaseQuantity > widget.product.stockInBaseUnit;
-  }
-
-  void _applyQuickQuantity(double value, String unit) {
-    setState(() {
-      _selectedUnit = unit;
-      _inputQuantity = value;
-      _quantityInputController.text = value == value.roundToDouble() ? value.toInt().toString() : value.toString();
-    });
+    return _counterQuantity > _selectedVariant.stock;
   }
 
   @override
   Widget build(BuildContext context) {
-    final category = widget.product.unitCategory;
-    final availableUnitOptions = UnitConversionService.getAvailableUnitOptions(category);
-    final quickOptions = UnitConversionService.getQuickQuantityOptions(category);
-
     return Padding(
       padding: EdgeInsets.only(
         left: 20,
         right: 20,
-        top: 24,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
       ),
-      child: SingleChildScrollView(
-        child: Form(
-          key: _qtyFormKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Modal Header Row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Header Row: Product Name & Stock
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.product.name,
-                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.primaryGreen),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'ক্যাটাগরি: ${widget.product.category} | বেস একক: ${widget.product.baseUnit}',
-                          style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: widget.product.isLowStock
-                          ? AppTheme.errorRed.withValues(alpha: 0.15)
-                          : AppTheme.primaryGreen.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        const Text('অবশিষ্ট স্টক', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
-                        Text(
-                          widget.product.formattedStock,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: widget.product.isLowStock ? AppTheme.errorRed : AppTheme.primaryGreen,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-
-              const Divider(height: 24),
-
-              // Choose Quantity Heading
               const Text(
-                'Choose Quantity (পরিমাণ নির্বাচন করুন)',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textDark),
-              ),
-              const SizedBox(height: 10),
-
-              // Quick Buttons Wrap
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: quickOptions.map((opt) {
-                  final String label = opt['label'];
-                  final double val = opt['value'];
-                  final String unit = opt['unit'];
-                  final bool isSelected = (_inputQuantity == val && _selectedUnit == unit);
-
-                  return ChoiceChip(
-                    label: Text(label),
-                    selected: isSelected,
-                    selectedColor: AppTheme.primaryGreen,
-                    labelStyle: TextStyle(
-                      color: isSelected ? Colors.white : AppTheme.textDark,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                    onSelected: (bool selected) {
-                      if (selected) {
-                        _applyQuickQuantity(val, unit);
-                      }
-                    },
-                  );
-                }).toList(),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Unit Selector Segmented Buttons / Toggle & Custom Quantity Input
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Unit Toggle Dropdown / Buttons
-                  Expanded(
-                    flex: 2,
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _selectedUnit,
-                      decoration: const InputDecoration(
-                        labelText: 'একক (Unit)',
-                        prefixIcon: Icon(Icons.tune_rounded, color: AppTheme.primaryGreen),
-                      ),
-                      items: availableUnitOptions.map((opt) {
-                        return DropdownMenuItem<String>(
-                          value: opt.value,
-                          child: Text(
-                            opt.label,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (val) {
-                        if (val != null) {
-                          setState(() {
-                            _selectedUnit = val;
-                          });
-                        }
-                      },
-                    ),
-                  ),
-
-                  const SizedBox(width: 12),
-
-                  // Custom Quantity Input
-                  Expanded(
-                    flex: 3,
-                    child: TextFormField(
-                      controller: _quantityInputController,
-                      keyboardType: TextInputType.numberWithOptions(
-                        decimal: widget.product.allowDecimal,
-                      ),
-                      decoration: InputDecoration(
-                        labelText: 'পরিমাণ (Custom Qty) *',
-                        prefixIcon: const Icon(Icons.edit_note_rounded, color: AppTheme.primaryGreen),
-                        errorStyle: const TextStyle(fontSize: 11),
-                        enabledBorder: _isStockInsufficient
-                            ? OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                borderSide: const BorderSide(color: AppTheme.errorRed, width: 2),
-                              )
-                            : null,
-                      ),
-                      onChanged: (val) {
-                        setState(() {
-                          _inputQuantity = double.tryParse(val.trim()) ?? 0.0;
-                        });
-                      },
-                      validator: (val) {
-                        if (val == null || val.trim().isEmpty) return 'পরিমাণ দিন';
-                        final parsed = double.tryParse(val.trim());
-                        if (parsed == null || parsed <= 0) return '০-এর বেশি দিন';
-                        if (!widget.product.allowDecimal && parsed != parsed.roundToDouble()) {
-                          return 'শুধুমাত্র পূর্ণসংখ্যা';
-                        }
-                        if (_isStockInsufficient) {
-                          return 'স্টকের চেয়ে বেশি';
-                        }
-                        return null;
-                      },
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 16),
-
-              // Live Price Calculation Card
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryGreen.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.primaryGreen.withValues(alpha: 0.2)),
+                'POS - ভ্যারিয়েন্ট নির্বাচন',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.primaryGreen,
                 ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close_rounded),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+
+          const Divider(height: 16),
+
+          // Product Info Row
+          Row(
+            children: [
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: AppTheme.lightGreenBg,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: widget.product.imageUrl.isNotEmpty
+                      ? Image.network(
+                          widget.product.imageUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => const Icon(Icons.eco_rounded, color: AppTheme.primaryGreen),
+                        )
+                      : const Icon(Icons.eco_rounded, color: AppTheme.primaryGreen),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'হিসেব: ${UnitConversionService.formatQuantityWithUnit(_inputQuantity, _selectedUnit)} = ${_calculatedBaseQuantity.toInt()} ${widget.product.baseUnit}',
-                          style: const TextStyle(fontSize: 13, color: AppTheme.textMuted),
-                        ),
-                        Text(
-                          '৳${widget.product.baseUnitPrice}/${widget.product.baseUnit}',
-                          style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
-                        ),
-                      ],
+                    Text(
+                      widget.product.name,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(height: 6),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('মোট দাম (Total Price):', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                        Text(
-                          '৳ ${_calculatedTotalPrice.toStringAsFixed(0)}',
-                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.primaryGreen),
-                        ),
-                      ],
+                    Text(
+                      'মোট স্টক: ${widget.product.formattedStock}',
+                      style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
                     ),
                   ],
                 ),
               ),
+            ],
+          ),
 
-              // Stock Validation Error Banner (Requirement 8)
-              if (_isStockInsufficient) ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
+          const SizedBox(height: 16),
+
+          // Dynamic Variant Grid Selector Cards
+          const Text(
+            'ভ্যারিয়েন্ট বাছাই করুন:',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textDark),
+          ),
+
+          const SizedBox(height: 8),
+
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              childAspectRatio: 2.5,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+            ),
+            itemCount: widget.product.variants.length,
+            itemBuilder: (context, index) {
+              final v = widget.product.variants[index];
+              final isSelected = v.id == _selectedVariant.id;
+
+              return InkWell(
+                onTap: () {
+                  setState(() {
+                    _selectedVariant = v;
+                  });
+                },
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFCE8E6),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppTheme.errorRed.withValues(alpha: 0.5)),
+                    color: isSelected ? AppTheme.primaryGreen : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isSelected ? AppTheme.primaryGreen : AppTheme.cardBorderColor,
+                      width: isSelected ? 2 : 1,
+                    ),
                   ),
                   child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Icon(Icons.error_outline_rounded, color: AppTheme.errorRed, size: 20),
-                      const SizedBox(width: 8),
                       Expanded(
-                        child: Text(
-                          'পর্যাপ্ত স্টক নেই! (Insufficient Stock)\nপ্রয়োজন: ${_calculatedBaseQuantity.toInt()} ${widget.product.baseUnit} | অবশিষ্ট: ${widget.product.formattedStock}',
-                          style: const TextStyle(color: AppTheme.errorRed, fontWeight: FontWeight.bold, fontSize: 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              v.sizeLabel,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: isSelected ? Colors.white : AppTheme.textDark,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              '৳ ${v.price.toStringAsFixed(0)}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: isSelected ? Colors.white70 : AppTheme.primaryGreen,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
+                      if (isSelected)
+                        const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
                     ],
                   ),
                 ),
-              ],
+              );
+            },
+          ),
 
-              const SizedBox(height: 20),
+          const SizedBox(height: 16),
 
-              // Action Buttons: Cancel & Add to Cart
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: const Text('বাতিল', style: TextStyle(fontWeight: FontWeight.bold)),
+          // Quantity Adjuster (-) Counter (+)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'পরিমাণ (Quantity):',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: AppTheme.cardBorderColor),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.remove, color: AppTheme.errorRed),
+                      onPressed: _counterQuantity > 1
+                          ? () => setState(() => _counterQuantity--)
+                          : null,
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: (_isStockInsufficient || _inputQuantity <= 0)
-                          ? null
-                          : () {
-                              if (!_qtyFormKey.currentState!.validate()) return;
-                              final cartItem = PosCartItem(
-                                product: widget.product,
-                                inputQuantity: _inputQuantity,
-                                selectedUnit: _selectedUnit,
-                                baseQuantity: _calculatedBaseQuantity,
-                                totalPrice: _calculatedTotalPrice,
-                              );
-                              widget.onAddToCart(cartItem);
-                              Navigator.pop(context);
-                            },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryGreen,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14.0),
+                      child: Text(
+                        '$_counterQuantity',
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
-                      icon: const Icon(Icons.add_shopping_cart_rounded, color: Colors.white, size: 20),
-                      label: const Text('কার্টে যোগ করুন', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.add, color: AppTheme.primaryGreen),
+                      onPressed: () => setState(() => _counterQuantity++),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 14),
+
+          // Selection Breakdown Container
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryGreen.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.primaryGreen.withValues(alpha: 0.2)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$_counterQuantity × ${_selectedVariant.sizeLabel}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    Text(
+                      '৳${_selectedVariant.price.toStringAsFixed(0)} প্রতি এককে',
+                      style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                    ),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    const Text('মোট দাম', style: TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+                    Text(
+                      '৳ ${_calculatedTotalPrice.toStringAsFixed(0)}',
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.primaryGreen),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          if (_isStockInsufficient) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEE2E2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline_rounded, color: AppTheme.errorRed, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'পর্যাপ্ত স্টক নেই! (অবশিষ্ট স্টক: ${_selectedVariant.stock.toInt()}টি)',
+                      style: const TextStyle(color: AppTheme.errorRed, fontWeight: FontWeight.bold, fontSize: 12),
                     ),
                   ),
                 ],
               ),
+            ),
+          ],
+
+          const SizedBox(height: 20),
+
+          // Action Buttons: "বাতিল" (Cancel) & "কার্টে যোগ করুন" (Add to Cart)
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: const Text('বাতিল', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _isStockInsufficient
+                      ? null
+                      : () {
+                          final item = PosCartItem(
+                            product: widget.product,
+                            variant: _selectedVariant,
+                            quantity: _counterQuantity,
+                            totalPrice: _calculatedTotalPrice,
+                          );
+                          widget.onAddToCart(item);
+                          Navigator.pop(context);
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryGreen,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  icon: const Icon(Icons.add_shopping_cart_rounded, color: Colors.white, size: 18),
+                  label: const Text('কার্টে যোগ করুন', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                ),
+              ),
             ],
           ),
-        ),
+        ],
       ),
     );
   }

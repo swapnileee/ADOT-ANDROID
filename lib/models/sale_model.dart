@@ -1,6 +1,8 @@
 class SaleModel {
   final dynamic id;
   final String productName;
+  final String? variantId;
+  final String? variantLabel;
   final int quantity; // Integer base quantity representation for legacy compat
   final double baseQuantity; // Exact quantity in base unit (e.g. 1500 g, 1.5 L, 3 pcs)
   final String displayQuantityWithUnit; // User friendly string (e.g. "1.5 L", "300 g", "3 pcs")
@@ -13,6 +15,8 @@ class SaleModel {
   SaleModel({
     this.id,
     required this.productName,
+    this.variantId,
+    this.variantLabel,
     int? quantity,
     double? baseQuantity,
     String? displayQuantityWithUnit,
@@ -35,6 +39,8 @@ class SaleModel {
     return SaleModel(
       id: json['id'],
       productName: json['product_name']?.toString() ?? '',
+      variantId: json['variant_id']?.toString(),
+      variantLabel: json['variant_label']?.toString(),
       quantity: parsedQty,
       baseQuantity: parsedBaseQty,
       displayQuantityWithUnit: parsedDisplayUnit,
@@ -49,6 +55,8 @@ class SaleModel {
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = {
       'product_name': productName,
+      'variant_id': variantId,
+      'variant_label': variantLabel,
       'quantity': quantity,
       'base_quantity': baseQuantity,
       'display_quantity_with_unit': displayQuantityWithUnit,

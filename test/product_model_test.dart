@@ -1,107 +1,86 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:adot_shop_app/models/product_model.dart';
-import 'package:adot_shop_app/services/unit_conversion_service.dart';
 
 void main() {
-  group('ProductModel Tests & Backwards Compatibility', () {
-    test('Legacy product JSON defaults seamlessly to Count category with pcs base unit', () {
+  group('Variant-Based Product Architecture Tests', () {
+    test('ProductVariant model instantiates and parses JSON correctly', () {
+      final json = {
+        'id': 'v_1',
+        'size_label': '250 ml',
+        'price': 250.0,
+        'stock': 40.0,
+      };
+
+      final variant = ProductVariant.fromJson(json);
+
+      expect(variant.id, 'v_1');
+      expect(variant.sizeLabel, '250 ml');
+      expect(variant.price, 250.0);
+      expect(variant.stock, 40.0);
+    });
+
+    test('Product calculates minPrice, maxPrice, and totalStock across variants', () {
+      final product = Product(
+        id: 'p_1',
+        name: 'সরিষার তেল',
+        category: 'তেল',
+        supplier: 'ADOT Organic',
+        imageUrl: '',
+        baseUnit: 'ml',
+        variants: [
+          ProductVariant(id: 'v_1', sizeLabel: '250 ml', price: 250.0, stock: 40.0),
+          ProductVariant(id: 'v_2', sizeLabel: '500 ml', price: 450.0, stock: 35.0),
+          ProductVariant(id: 'v_3', sizeLabel: '1 L', price: 850.0, stock: 25.0),
+        ],
+      );
+
+      expect(product.minPrice, 250.0);
+      expect(product.maxPrice, 850.0);
+      expect(product.totalStock, 100.0);
+      expect(product.priceRangeText, '৳250 - ৳850');
+      expect(product.formattedStock, '100 ml');
+    });
+
+    test('Legacy product JSON without variants defaults seamlessly to a fallback variant', () {
       final legacyJson = {
-        'id': 1,
+        'id': 'p_legacy',
         'name': 'সাবান',
-        'category': 'প্রসাধন',
-        'buying_price': 40.0,
+        'category': 'সাধারণ',
         'selling_price': 55.0,
         'stock_quantity': 25,
       };
 
-      final product = ProductModel.fromJson(legacyJson);
+      final product = Product.fromJson(legacyJson);
 
-      expect(product.id, 1);
+      expect(product.id, 'p_legacy');
       expect(product.name, 'সাবান');
-      expect(product.unitCategory, UnitCategory.count);
-      expect(product.baseUnit, 'pcs');
-      expect(product.baseUnitPrice, 55.0);
-      expect(product.sellingPrice, 55.0);
-      expect(product.stockInBaseUnit, 25.0);
-      expect(product.stockQuantity, 25);
-      expect(product.allowDecimal, false);
-      expect(product.formattedStock, '25 pcs');
+      expect(product.variants.length, 1);
+      expect(product.minPrice, 55.0);
+      expect(product.totalStock, 25.0);
     });
 
-    test('Multi-unit Weight product JSON parses correctly', () {
-      final weightJson = {
-        'id': 2,
-        'name': 'আখের লাল চিনি',
-        'category': 'মুদি',
-        'buying_price': 0.20,
-        'selling_price': 0.28,
-        'stock_quantity': 5000,
-        'unit_category': 'weight',
-        'base_unit': 'g',
-        'base_unit_price': 0.28,
-        'stock_in_base_unit': 5000.0,
-        'allow_decimal': true,
-      };
-
-      final product = ProductModel.fromJson(weightJson);
-
-      expect(product.unitCategory, UnitCategory.weight);
-      expect(product.baseUnit, 'g');
-      expect(product.baseUnitPrice, 0.28);
-      expect(product.stockInBaseUnit, 5000.0);
-      expect(product.allowDecimal, true);
-      expect(product.formattedStock, '5 kg');
-    });
-
-    test('Multi-unit Volume product JSON parses correctly', () {
-      final volumeJson = {
-        'id': 3,
-        'name': 'সরিষার তেল',
-        'category': 'মুদি',
-        'buying_price': 0.15,
-        'selling_price': 0.19,
-        'stock_quantity': 10000,
-        'unit_category': 'volume',
-        'base_unit': 'ml',
-        'base_unit_price': 0.19,
-        'stock_in_base_unit': 10000.0,
-        'allow_decimal': true,
-      };
-
-      final product = ProductModel.fromJson(volumeJson);
-
-      expect(product.unitCategory, UnitCategory.volume);
-      expect(product.baseUnit, 'ml');
-      expect(product.baseUnitPrice, 0.19);
-      expect(product.stockInBaseUnit, 10000.0);
-      expect(product.allowDecimal, true);
-      expect(product.formattedStock, '10 L');
-    });
-
-    test('toJson produces backwards compatible structure', () {
-      final product = ProductModel(
-        id: 10,
-        name: 'সরিষার তেল',
-        category: 'মুদি',
-        buyingPrice: 0.15,
-        unitCategory: UnitCategory.volume,
-        baseUnit: 'ml',
-        baseUnitPrice: 0.19,
-        stockInBaseUnit: 1500.0,
-        allowDecimal: true,
+    test('Product toJson produces complete variant list and backwards compatible fields', () {
+      final product = Product(
+        id: 'p_10',
+        name: 'সুন্দরবনের মধু',
+        category: 'মধু',
+        supplier: 'ADOT Honey',
+        imageUrl: '',
+        baseUnit: 'g',
+        variants: [
+          ProductVariant(id: 'v_10', sizeLabel: '250 g', price: 400.0, stock: 20.0),
+          ProductVariant(id: 'v_11', sizeLabel: '500 g', price: 750.0, stock: 30.0),
+        ],
       );
 
       final json = product.toJson();
 
-      expect(json['id'], 10);
-      expect(json['name'], 'সরিষার তেল');
-      expect(json['selling_price'], 0.19);
-      expect(json['stock_quantity'], 1500);
-      expect(json['unit_category'], 'volume');
-      expect(json['base_unit'], 'ml');
-      expect(json['base_unit_price'], 0.19);
-      expect(json['stock_in_base_unit'], 1500.0);
-      expect(json['allow_decimal'], true);
+      expect(json['id'], 'p_10');
+      expect(json['name'], 'সুন্দরবনের মধু');
+      expect(json['category'], 'মধু');
+      expect((json['variants'] as List).length, 2);
+      expect(json['selling_price'], 400.0);
+      expect(json['stock_quantity'], 50);
     });
   });
 }

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../services/supabase_service.dart';
-import '../services/unit_conversion_service.dart';
 import '../models/product_model.dart';
 import '../widgets/custom_snackbar.dart';
 import '../theme/app_theme.dart';
 import 'add_product_screen.dart';
+import 'product_details_screen.dart';
 
 class InventoryScreen extends StatefulWidget {
   const InventoryScreen({super.key});
@@ -17,10 +17,20 @@ class InventoryScreen extends StatefulWidget {
 class _InventoryScreenState extends State<InventoryScreen> {
   final SupabaseService _supabaseService = SupabaseService();
 
-  List<ProductModel> _products = [];
-  List<ProductModel> _filteredProducts = [];
+  List<Product> _products = [];
+  List<Product> _filteredProducts = [];
   String _searchQuery = '';
+  String _selectedCategoryFilter = 'সকল';
   bool _isLoading = true;
+
+  final List<String> _categoryFilters = [
+    'সকল',
+    'তেল',
+    'শস্য ও ডাল',
+    'মধু',
+    'ডিম ও দুধ',
+    'ফল',
+  ];
 
   @override
   void initState() {
@@ -35,7 +45,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
       if (!mounted) return;
       setState(() {
         _products = products;
-        _applySearch();
+        _applyFilters();
         _isLoading = false;
       });
     } catch (e) {
@@ -45,18 +55,24 @@ class _InventoryScreenState extends State<InventoryScreen> {
     }
   }
 
-  void _applySearch() {
-    if (_searchQuery.isEmpty) {
-      _filteredProducts = List.from(_products);
-    } else {
-      _filteredProducts = _products.where((p) {
-        return p.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-            p.category.toLowerCase().contains(_searchQuery.toLowerCase());
-      }).toList();
+  void _applyFilters() {
+    List<Product> temp = List.from(_products);
+
+    if (_selectedCategoryFilter != 'সকল') {
+      temp = temp.where((p) => p.category.toLowerCase().contains(_selectedCategoryFilter.toLowerCase())).toList();
     }
+
+    if (_searchQuery.trim().isNotEmpty) {
+      final q = _searchQuery.trim().toLowerCase();
+      temp = temp.where((p) => p.name.toLowerCase().contains(q) || p.category.toLowerCase().contains(q) || p.supplier.toLowerCase().contains(q)).toList();
+    }
+
+    setState(() {
+      _filteredProducts = temp;
+    });
   }
 
-  Future<void> _openAddProductScreen({ProductModel? productToEdit}) async {
+  Future<void> _openAddProductScreen({Product? productToEdit}) async {
     final result = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
@@ -69,58 +85,17 @@ class _InventoryScreenState extends State<InventoryScreen> {
     }
   }
 
-  void _showRestockDialog(ProductModel product) {
-    final TextEditingController restockController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text('${product.name} - স্টক পুনর্নবীকরণ'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('বর্তমান স্টক: ${product.formattedStock}'),
-              const SizedBox(height: 12),
-              TextField(
-                controller: restockController,
-                keyboardType: TextInputType.numberWithOptions(
-                  decimal: product.allowDecimal,
-                ),
-                decoration: InputDecoration(
-                  labelText: 'নতুন নতুন যুক্ত স্টক (${UnitConversionService.getBaseUnit(product.unitCategory)})',
-                  hintText: 'যেমন: 1000',
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('বাতিল'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final added = double.tryParse(restockController.text.trim()) ?? 0.0;
-                if (added <= 0) return;
-                final newStock = product.stockInBaseUnit + added;
-                Navigator.pop(context);
-                try {
-                  await _supabaseService.updateProductStock(product.id, newStock);
-                  if (!context.mounted) return;
-                  CustomSnackBar.showSuccess(context, 'স্টক সফলভাবে আপডেট হয়েছে!');
-                  _loadProducts();
-                } catch (e) {
-                  if (!context.mounted) return;
-                  CustomSnackBar.showError(context, 'স্টক আপডেট ব্যর্থ: $e');
-                }
-              },
-              child: const Text('আপডেট করুন'),
-            ),
-          ],
-        );
-      },
+  void _openProductDetails(Product product) async {
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProductDetailsScreen(product: product),
+      ),
     );
+
+    if (result == true) {
+      _loadProducts();
+    }
   }
 
   @override
@@ -133,22 +108,26 @@ class _InventoryScreenState extends State<InventoryScreen> {
           onPressed: () => Scaffold.of(context).openDrawer(),
           tooltip: 'মেনু খুলুন',
         ),
-        title: const Text('ইনভেন্টরি ও পণ্য তালিকা'),
+        title: const Text('পণ্য সমূহ'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.search_rounded),
+            onPressed: () {
+              // Focus search bar
+            },
+            tooltip: 'খুঁজুন',
+          ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             onPressed: _loadProducts,
+            tooltip: 'রিফ্রেশ',
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: () => _openAddProductScreen(),
         backgroundColor: AppTheme.primaryGreen,
-        icon: const Icon(Icons.add_box_rounded, color: Colors.white),
-        label: const Text(
-          'নতুন পণ্য',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
+        child: const Icon(Icons.add, color: Colors.white, size: 28),
       ),
       body: SafeArea(
         child: _isLoading
@@ -160,28 +139,93 @@ class _InventoryScreenState extends State<InventoryScreen> {
               )
             : RefreshIndicator(
                 onRefresh: _loadProducts,
+                color: AppTheme.primaryGreen,
                 child: Column(
                   children: [
-                    // Search Bar
+                    // Search Bar & Filter Toggle
                     Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: TextField(
-                        onChanged: (val) {
-                          setState(() {
-                            _searchQuery = val;
-                            _applySearch();
-                          });
-                        },
-                        decoration: const InputDecoration(
-                          hintText: 'পণ্যের নাম বা ক্যাটাগরি অনুসন্ধান করুন...',
-                          prefixIcon: Icon(Icons.search_rounded, color: AppTheme.primaryGreen),
-                        ),
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              onChanged: (val) {
+                                _searchQuery = val;
+                                _applyFilters();
+                              },
+                              decoration: InputDecoration(
+                                hintText: 'পণ্য খুঁজুন...',
+                                prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.primaryGreen),
+                                fillColor: Colors.white,
+                                filled: true,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: const BorderSide(color: AppTheme.cardBorderColor),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryGreen,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: IconButton(
+                              icon: const Icon(Icons.tune_rounded, color: Colors.white),
+                              onPressed: () {
+                                // Toggle category filter
+                              },
+                            ),
+                          ),
+                        ],
                       ),
                     ),
 
-                    // Products Counter Summary
+                    // Horizontally Scrollable Category Filter Chips
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Row(
+                        children: _categoryFilters.map((cat) {
+                          final isSelected = _selectedCategoryFilter == cat;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8.0),
+                            child: ChoiceChip(
+                              label: Text(cat),
+                              selected: isSelected,
+                              selectedColor: AppTheme.primaryGreen,
+                              backgroundColor: Colors.white,
+                              labelStyle: TextStyle(
+                                color: isSelected ? Colors.white : AppTheme.textDark,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                                side: BorderSide(
+                                  color: isSelected ? AppTheme.primaryGreen : AppTheme.cardBorderColor,
+                                ),
+                              ),
+                              onSelected: (selected) {
+                                if (selected) {
+                                  setState(() {
+                                    _selectedCategoryFilter = cat;
+                                    _applyFilters();
+                                  });
+                                }
+                              },
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+
+                    const SizedBox(height: 4),
+
+                    // Product List Counter Summary
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -189,29 +233,17 @@ class _InventoryScreenState extends State<InventoryScreen> {
                             'মোট পণ্য: ${_filteredProducts.length}টি',
                             style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textDark),
                           ),
-                          Row(
-                            children: [
-                              Container(
-                                width: 10,
-                                height: 10,
-                                decoration: const BoxDecoration(
-                                  color: AppTheme.errorRed,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              const Text(
-                                'কম স্টক চিহ্নিত',
-                                style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
-                              ),
-                            ],
+                          Text(
+                            'ফিল্টার: $_selectedCategoryFilter',
+                            style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 8),
 
-                    // Product List
+                    const SizedBox(height: 6),
+
+                    // Product Cards List
                     Expanded(
                       child: _filteredProducts.isEmpty
                           ? const Center(
@@ -226,145 +258,112 @@ class _InventoryScreenState extends State<InventoryScreen> {
                               itemBuilder: (context, index) {
                                 final product = _filteredProducts[index];
                                 return Card(
-                                  margin: const EdgeInsets.only(bottom: 10),
+                                  margin: const EdgeInsets.only(bottom: 12),
                                   child: InkWell(
-                                    onTap: () => _openAddProductScreen(productToEdit: product),
-                                    borderRadius: BorderRadius.circular(12),
+                                    onTap: () => _openProductDetails(product),
+                                    borderRadius: BorderRadius.circular(14),
                                     child: Padding(
                                       padding: const EdgeInsets.all(12.0),
                                       child: Row(
                                         children: [
-                                          // Product icon with stock indicator
-                                          Stack(
-                                            children: [
-                                              Container(
-                                                padding: const EdgeInsets.all(12),
-                                                decoration: BoxDecoration(
-                                                  color: product.isLowStock
-                                                      ? AppTheme.errorRed.withValues(alpha: 0.1)
-                                                      : AppTheme.primaryGreen.withValues(alpha: 0.1),
-                                                  borderRadius: BorderRadius.circular(12),
-                                                ),
-                                                child: Icon(
-                                                  Icons.inventory_2_outlined,
-                                                  color: product.isLowStock ? AppTheme.errorRed : AppTheme.primaryGreen,
-                                                  size: 26,
-                                                ),
-                                              ),
-                                              if (product.isLowStock)
-                                                Positioned(
-                                                  right: 0,
-                                                  top: 0,
-                                                  child: Container(
-                                                    padding: const EdgeInsets.all(3),
-                                                    decoration: const BoxDecoration(
-                                                      color: AppTheme.errorRed,
-                                                      shape: BoxShape.circle,
+                                          // Product Thumbnail Image
+                                          Container(
+                                            width: 64,
+                                            height: 64,
+                                            decoration: BoxDecoration(
+                                              color: AppTheme.lightGreenBg,
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: ClipRRect(
+                                              borderRadius: BorderRadius.circular(12),
+                                              child: product.imageUrl.isNotEmpty
+                                                  ? Image.network(
+                                                      product.imageUrl,
+                                                      fit: BoxFit.cover,
+                                                      errorBuilder: (_, __, ___) => const Icon(
+                                                        Icons.eco_rounded,
+                                                        color: AppTheme.primaryGreen,
+                                                        size: 32,
+                                                      ),
+                                                    )
+                                                  : const Icon(
+                                                      Icons.eco_rounded,
+                                                      color: AppTheme.primaryGreen,
+                                                      size: 32,
                                                     ),
-                                                  ),
-                                                ),
-                                            ],
+                                            ),
                                           ),
                                           const SizedBox(width: 14),
 
-                                          // Product Details
+                                          // Product Details & Subtitles
                                           Expanded(
                                             child: Column(
                                               crossAxisAlignment: CrossAxisAlignment.start,
                                               children: [
+                                                Text(
+                                                  product.name,
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 16,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                                const SizedBox(height: 4),
                                                 Row(
                                                   children: [
-                                                    Expanded(
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                      decoration: BoxDecoration(
+                                                        color: AppTheme.primaryGreen.withValues(alpha: 0.1),
+                                                        borderRadius: BorderRadius.circular(6),
+                                                      ),
                                                       child: Text(
-                                                        product.name,
+                                                        '${product.variants.length} টি ভ্যারিয়েন্ট',
                                                         style: const TextStyle(
+                                                          fontSize: 11,
+                                                          color: AppTheme.primaryGreen,
                                                           fontWeight: FontWeight.bold,
-                                                          fontSize: 16,
                                                         ),
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow.ellipsis,
                                                       ),
                                                     ),
-                                                    if (product.isLowStock)
-                                                      Container(
-                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                                        decoration: BoxDecoration(
-                                                          color: AppTheme.errorRed,
-                                                          borderRadius: BorderRadius.circular(12),
-                                                        ),
-                                                        child: const Text(
-                                                          'কম স্টক',
-                                                          style: TextStyle(
-                                                            color: Colors.white,
-                                                            fontSize: 10,
-                                                            fontWeight: FontWeight.bold,
-                                                          ),
-                                                        ),
+                                                    const SizedBox(width: 8),
+                                                    Text(
+                                                      'স্টক: ${product.formattedStock}',
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        color: product.isLowStock ? AppTheme.errorRed : AppTheme.textMuted,
+                                                        fontWeight: product.isLowStock ? FontWeight.bold : FontWeight.normal,
                                                       ),
+                                                    ),
                                                   ],
                                                 ),
                                                 const SizedBox(height: 4),
                                                 Text(
-                                                  'ক্যাটাগরি: ${product.category} (${UnitConversionService.getCategoryLabelBengali(product.unitCategory)})',
-                                                  style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
-                                                ),
-                                                const SizedBox(height: 4),
-                                                Row(
-                                                  children: [
-                                                    Text(
-                                                      'ক্রয়: ৳${product.buyingPrice.toStringAsFixed(2)}/${product.baseUnit}',
-                                                      style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
-                                                    ),
-                                                    const SizedBox(width: 10),
-                                                    Text(
-                                                      'বিক্রয়: ৳${product.baseUnitPrice.toStringAsFixed(2)}/${product.baseUnit}',
-                                                      style: const TextStyle(
-                                                        fontSize: 12,
-                                                        fontWeight: FontWeight.bold,
-                                                        color: AppTheme.primaryGreen,
-                                                      ),
-                                                    ),
-                                                  ],
+                                                  'সরবরাহকারী: ${product.supplier}',
+                                                  style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
                                                 ),
                                               ],
                                             ),
                                           ),
                                           const SizedBox(width: 8),
 
-                                          // Stock Count & Action
+                                          // Price Range Display on Right
                                           Column(
+                                            crossAxisAlignment: CrossAxisAlignment.end,
                                             children: [
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                                decoration: BoxDecoration(
-                                                  color: product.isLowStock
-                                                      ? AppTheme.errorRed.withValues(alpha: 0.15)
-                                                      : AppTheme.accentGold.withValues(alpha: 0.3),
-                                                  borderRadius: BorderRadius.circular(8),
-                                                ),
-                                                child: Text(
-                                                  product.formattedStock,
-                                                  style: TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    color: product.isLowStock ? AppTheme.errorRed : AppTheme.darkGreen,
-                                                    fontSize: 13,
-                                                  ),
+                                              Text(
+                                                product.priceRangeText,
+                                                style: const TextStyle(
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: AppTheme.primaryGreen,
                                                 ),
                                               ),
                                               const SizedBox(height: 4),
-                                              InkWell(
-                                                onTap: () => _showRestockDialog(product),
-                                                child: const Padding(
-                                                  padding: EdgeInsets.all(4.0),
-                                                  child: Text(
-                                                    '+ স্টক যোগ',
-                                                    style: TextStyle(
-                                                      fontSize: 11,
-                                                      color: AppTheme.primaryGreen,
-                                                      fontWeight: FontWeight.bold,
-                                                    ),
-                                                  ),
-                                                ),
+                                              const Icon(
+                                                Icons.chevron_right_rounded,
+                                                color: AppTheme.textMuted,
                                               ),
                                             ],
                                           ),

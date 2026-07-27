@@ -1,129 +1,167 @@
 import '../services/unit_conversion_service.dart';
 
-class ProductModel {
-  final dynamic id; // int or String depending on UUID / int sequence
-  final String name;
-  final String category;
-  final double buyingPrice;
-  final UnitCategory unitCategory;
-  final String baseUnit;
-  final double baseUnitPrice;
-  final double stockInBaseUnit;
-  final bool allowDecimal;
+class ProductVariant {
+  final String id;
+  final String sizeLabel; // e.g., "250 ml", "500 ml", "1 L", "2 L"
+  final double price;
+  final double stock;
 
-  ProductModel({
-    this.id,
-    required this.name,
-    required this.category,
-    required this.buyingPrice,
-    UnitCategory? unitCategory,
-    String? baseUnit,
-    double? baseUnitPrice,
-    double? stockInBaseUnit,
-    bool? allowDecimal,
-    // Backwards compatibility constructor parameters:
-    double? sellingPrice,
-    int? stockQuantity,
-  })  : baseUnitPrice = baseUnitPrice ?? sellingPrice ?? 0.0,
-        stockInBaseUnit = stockInBaseUnit ?? (stockQuantity ?? 0).toDouble(),
-        unitCategory = unitCategory ?? UnitCategory.count,
-        baseUnit = baseUnit ?? UnitConversionService.getBaseUnit(unitCategory ?? UnitCategory.count),
-        allowDecimal = allowDecimal ?? ((unitCategory ?? UnitCategory.count) != UnitCategory.count);
+  ProductVariant({
+    required this.id,
+    required this.sizeLabel,
+    required this.price,
+    required this.stock,
+  });
 
-  /// Backwards compatibility getter for selling price.
-  double get sellingPrice => baseUnitPrice;
-
-  /// Backwards compatibility getter for stock quantity in integer units.
-  int get stockQuantity => stockInBaseUnit.toInt();
-
-  /// Formatted stock string in human-readable units (e.g. 5 kg, 500 g, 10 L, 25 pcs).
-  String get formattedStock => UnitConversionService.formatStockDisplay(stockInBaseUnit, unitCategory);
-
-  factory ProductModel.fromJson(Map<String, dynamic> json) {
-    final parsedCategory = json['unit_category'] != null
-        ? UnitCategory.values.firstWhere(
-            (e) => e.name == json['unit_category'].toString(),
-            orElse: () => UnitCategory.count,
-          )
-        : UnitConversionService.parseCategory(json['category']?.toString());
-
-    final parsedBaseUnit = json['base_unit']?.toString() ?? UnitConversionService.getBaseUnit(parsedCategory);
-
-    final double parsedPrice = (json['base_unit_price'] as num?)?.toDouble() ??
-        (json['selling_price'] as num?)?.toDouble() ??
-        0.0;
-
-    final double parsedStock = (json['stock_in_base_unit'] as num?)?.toDouble() ??
-        (json['stock_quantity'] as num?)?.toDouble() ??
-        0.0;
-
-    final bool parsedAllowDecimal = (json['allow_decimal'] as bool?) ?? (parsedCategory != UnitCategory.count);
-
-    return ProductModel(
-      id: json['id'],
-      name: json['name']?.toString() ?? '',
-      category: json['category']?.toString() ?? '',
-      buyingPrice: (json['buying_price'] as num?)?.toDouble() ?? 0.0,
-      unitCategory: parsedCategory,
-      baseUnit: parsedBaseUnit,
-      baseUnitPrice: parsedPrice,
-      stockInBaseUnit: parsedStock,
-      allowDecimal: parsedAllowDecimal,
+  factory ProductVariant.fromJson(Map<String, dynamic> json) {
+    return ProductVariant(
+      id: json['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      sizeLabel: json['size_label']?.toString() ?? json['sizeLabel']?.toString() ?? 'Default',
+      price: (json['price'] as num?)?.toDouble() ?? 0.0,
+      stock: (json['stock'] as num?)?.toDouble() ?? 0.0,
     );
   }
 
   Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = {
-      'name': name,
-      'category': category,
-      'buying_price': buyingPrice,
-      'selling_price': baseUnitPrice,
-      'stock_quantity': stockInBaseUnit.toInt(),
-      'unit_category': unitCategory.name,
-      'base_unit': baseUnit,
-      'base_unit_price': baseUnitPrice,
-      'stock_in_base_unit': stockInBaseUnit,
-      'allow_decimal': allowDecimal,
+    return {
+      'id': id,
+      'size_label': sizeLabel,
+      'price': price,
+      'stock': stock,
     };
-    if (id != null) {
-      data['id'] = id;
-    }
-    return data;
   }
 
-  /// Low stock threshold based on unit category.
-  bool get isLowStock {
-    switch (unitCategory) {
-      case UnitCategory.weight:
-      case UnitCategory.volume:
-        return stockInBaseUnit <= 5000; // <= 5 kg or <= 5 L
-      case UnitCategory.count:
-        return stockInBaseUnit <= 5; // <= 5 pcs
-    }
-  }
-
-  /// Returns a copy of the product with updated fields.
-  ProductModel copyWith({
-    dynamic id,
-    String? name,
-    String? category,
-    double? buyingPrice,
-    UnitCategory? unitCategory,
-    String? baseUnit,
-    double? baseUnitPrice,
-    double? stockInBaseUnit,
-    bool? allowDecimal,
+  ProductVariant copyWith({
+    String? id,
+    String? sizeLabel,
+    double? price,
+    double? stock,
   }) {
-    return ProductModel(
+    return ProductVariant(
       id: id ?? this.id,
-      name: name ?? this.name,
-      category: category ?? this.category,
-      buyingPrice: buyingPrice ?? this.buyingPrice,
-      unitCategory: unitCategory ?? this.unitCategory,
-      baseUnit: baseUnit ?? this.baseUnit,
-      baseUnitPrice: baseUnitPrice ?? this.baseUnitPrice,
-      stockInBaseUnit: stockInBaseUnit ?? this.stockInBaseUnit,
-      allowDecimal: allowDecimal ?? this.allowDecimal,
+      sizeLabel: sizeLabel ?? this.sizeLabel,
+      price: price ?? this.price,
+      stock: stock ?? this.stock,
     );
   }
 }
+
+class Product {
+  final String id;
+  final String name;
+  final String category;
+  final String supplier;
+  final String imageUrl;
+  final String baseUnit; // e.g., "ml", "g", "pcs", "L", "kg"
+  final List<ProductVariant> variants;
+
+  Product({
+    required this.id,
+    required this.name,
+    required this.category,
+    required this.supplier,
+    required this.imageUrl,
+    required this.baseUnit,
+    required this.variants,
+  });
+
+  double get minPrice => variants.isEmpty ? 0 : variants.map((v) => v.price).reduce((a, b) => a < b ? a : b);
+  double get maxPrice => variants.isEmpty ? 0 : variants.map((v) => v.price).reduce((a, b) => a > b ? a : b);
+  double get totalStock => variants.fold(0.0, (sum, v) => sum + v.stock);
+
+  // Backwards compatibility getters:
+  double get sellingPrice => minPrice;
+  double get buyingPrice => minPrice * 0.75;
+  int get stockQuantity => totalStock.toInt();
+  double get stockInBaseUnit => totalStock;
+  double get baseUnitPrice => minPrice;
+  bool get allowDecimal => baseUnit.toLowerCase() == 'g' || baseUnit.toLowerCase() == 'ml' || baseUnit.toLowerCase() == 'kg' || baseUnit.toLowerCase() == 'l';
+  UnitCategory get unitCategory => UnitConversionService.parseCategory(category.isNotEmpty ? category : baseUnit);
+
+  String get formattedStock {
+    final cleanVal = totalStock == totalStock.roundToDouble() ? totalStock.toInt().toString() : totalStock.toStringAsFixed(1);
+    return '$cleanVal $baseUnit';
+  }
+
+  String get priceRangeText {
+    if (variants.isEmpty) return '৳0';
+    if (minPrice == maxPrice) return '৳${minPrice.toStringAsFixed(0)}';
+    return '৳${minPrice.toStringAsFixed(0)} - ৳${maxPrice.toStringAsFixed(0)}';
+  }
+
+  bool get isLowStock => totalStock <= 10;
+
+  factory Product.fromJson(Map<String, dynamic> json) {
+    List<ProductVariant> parsedVariants = [];
+    if (json['variants'] != null && json['variants'] is List) {
+      parsedVariants = (json['variants'] as List)
+          .map((v) => ProductVariant.fromJson(v is Map<String, dynamic> ? v : Map<String, dynamic>.from(v)))
+          .toList();
+    }
+
+    // Fallback for legacy JSON structures
+    if (parsedVariants.isEmpty) {
+      final double price = (json['base_unit_price'] as num?)?.toDouble() ?? (json['selling_price'] as num?)?.toDouble() ?? 100.0;
+      final double stock = (json['stock_in_base_unit'] as num?)?.toDouble() ?? (json['stock_quantity'] as num?)?.toDouble() ?? 10.0;
+      final String unit = json['base_unit']?.toString() ?? 'pcs';
+      parsedVariants = [
+        ProductVariant(
+          id: 'v_1',
+          sizeLabel: '1 $unit',
+          price: price,
+          stock: stock,
+        )
+      ];
+    }
+
+    return Product(
+      id: json['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      name: json['name']?.toString() ?? '',
+      category: json['category']?.toString() ?? 'সাধারণ',
+      supplier: json['supplier']?.toString() ?? 'ADOT Organic',
+      imageUrl: json['image_url']?.toString() ?? json['imageUrl']?.toString() ?? '',
+      baseUnit: json['base_unit']?.toString() ?? json['baseUnit']?.toString() ?? 'pcs',
+      variants: parsedVariants,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'category': category,
+      'supplier': supplier,
+      'image_url': imageUrl,
+      'base_unit': baseUnit,
+      'variants': variants.map((v) => v.toJson()).toList(),
+      // Backwards compatibility database fields:
+      'selling_price': minPrice,
+      'stock_quantity': totalStock.toInt(),
+      'stock_in_base_unit': totalStock,
+      'base_unit_price': minPrice,
+    };
+  }
+
+  Product copyWith({
+    String? id,
+    String? name,
+    String? category,
+    String? supplier,
+    String? imageUrl,
+    String? baseUnit,
+    List<ProductVariant>? variants,
+  }) {
+    return Product(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      category: category ?? this.category,
+      supplier: supplier ?? this.supplier,
+      imageUrl: imageUrl ?? this.imageUrl,
+      baseUnit: baseUnit ?? this.baseUnit,
+      variants: variants ?? this.variants,
+    );
+  }
+}
+
+/// Backwards compatibility alias
+typedef ProductModel = Product;
