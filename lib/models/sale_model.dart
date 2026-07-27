@@ -46,7 +46,10 @@ class SaleModel {
       quantity: parsedQty,
       baseQuantity: parsedBaseQty,
       displayQuantityWithUnit: parsedDisplayUnit,
-      totalPrice: (json['total_price'] as num?)?.toDouble() ?? (json['totalPrice'] as num?)?.toDouble() ?? 0.0,
+      totalPrice: (json['total_price'] as num?)?.toDouble() ??
+          (json['total_amount'] as num?)?.toDouble() ??
+          (json['totalPrice'] as num?)?.toDouble() ??
+          0.0,
       customerName: json['customer_name']?.toString() ?? json['customerName']?.toString() ?? '',
       paidAmount: (json['paid_amount'] as num?)?.toDouble() ?? (json['paidAmount'] as num?)?.toDouble() ?? 0.0,
       dueAmount: (json['due_amount'] as num?)?.toDouble() ?? (json['dueAmount'] as num?)?.toDouble() ?? 0.0,
@@ -66,16 +69,16 @@ class SaleModel {
       'base_quantity': baseQuantity,
       'display_quantity_with_unit': displayQuantityWithUnit,
       'total_price': totalPrice,
+      'total_amount': totalPrice,
       'customer_name': customerName,
       'paid_amount': paidAmount,
       'due_amount': dueAmount,
+      'payment_status': dueAmount > 0 ? 'due' : 'paid',
       'payment_method': paymentMethod,
+      'created_at': (createdAt ?? DateTime.now()).toIso8601String(),
     };
     if (id != null) {
       data['id'] = id;
-    }
-    if (createdAt != null) {
-      data['created_at'] = createdAt!.toIso8601String();
     }
     return data;
   }

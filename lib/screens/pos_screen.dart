@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/supabase_service.dart';
 import '../models/product_model.dart';
 import '../widgets/custom_snackbar.dart';
@@ -231,6 +232,39 @@ class _POSScreenState extends State<POSScreen> {
     });
   }
 
+  void _showErrorDialog(BuildContext context, String title, String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.error_outline_rounded, color: AppTheme.errorRed, size: 24),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.errorRed),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Text(
+            message,
+            style: const TextStyle(fontSize: 13, color: AppTheme.textDark),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('বন্ধ করুন', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _submitCheckout() async {
     if (_cartItems.isEmpty) {
       CustomSnackBar.showWarning(context, 'অনুগ্রহ করে কার্টে অন্তত একটি পণ্য যোগ করুন');
@@ -266,9 +300,18 @@ class _POSScreenState extends State<POSScreen> {
       Navigator.pop(context); // Close bottom sheet if open
       _resetCartAndForm();
       _loadProducts(); // Refresh stocks
+    } on PostgrestException catch (e) {
+      if (!mounted) return;
+      debugPrint('SUPABASE POSTGREST ERROR: ${e.message} | Details: ${e.details} | Code: ${e.code}');
+      _showErrorDialog(
+        context,
+        'Supabase Postgrest Error (${e.code})',
+        'Message: ${e.message}\n\nDetails: ${e.details ?? "None"}\nHint: ${e.hint ?? "None"}',
+      );
     } catch (e) {
       if (!mounted) return;
-      CustomSnackBar.showError(context, 'বিক্রি করতে ত্রুটি: $e');
+      debugPrint('GENERIC CHECKOUT ERROR: $e');
+      _showErrorDialog(context, 'Checkout Error', e.toString());
     } finally {
       if (mounted) {
         setState(() => _isSubmitting = false);

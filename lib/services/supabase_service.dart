@@ -195,8 +195,13 @@ class SupabaseService {
     try {
       final client = _client;
       if (client != null) {
-        final response = await client.from('sales').select('*').order('created_at', ascending: false);
-        return (response as List).map((json) => SaleModel.fromJson(json)).toList();
+        try {
+          final response = await client.from('sales').select('*').order('created_at', ascending: false);
+          return (response as List).map((json) => SaleModel.fromJson(json)).toList();
+        } catch (_) {
+          final response = await client.from('orders').select('*').order('created_at', ascending: false);
+          return (response as List).map((json) => SaleModel.fromJson(json)).toList();
+        }
       }
     } catch (e) {
       debugPrint('Supabase fetchSales error: $e');
@@ -262,10 +267,27 @@ class SupabaseService {
       try {
         final client = _client;
         if (client != null) {
-          await client.from('sales').insert(sale.toJson());
+          try {
+            final response = await client.from('sales').insert(sale.toJson()).select();
+            debugPrint('SUCCESS SUPABASE INSERT SALES: $response');
+          } on PostgrestException catch (e) {
+            debugPrint('SUPABASE POSTGREST ERROR ON sales: ${e.message} | Details: ${e.details} | Code: ${e.code}');
+            if (e.code == '42P01' || e.message.contains('does not exist')) {
+              try {
+                final responseOrders = await client.from('orders').insert(sale.toJson()).select();
+                debugPrint('SUCCESS SUPABASE INSERT ORDERS: $responseOrders');
+              } on PostgrestException catch (e2) {
+                debugPrint('SUPABASE POSTGREST ERROR ON orders fallback: ${e2.message}');
+                rethrow;
+              }
+            } else {
+              rethrow;
+            }
+          }
         }
       } catch (e) {
         debugPrint('Supabase sales insert error: $e');
+        rethrow;
       }
     }
   }
