@@ -100,14 +100,16 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                top: 20,
-                left: 16,
-                right: 16,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-              ),
-              child: SingleChildScrollView(
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  top: 20,
+                  left: 16,
+                  right: 16,
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                ),
+                child: SingleChildScrollView(
                 child: Form(
                   key: formKey,
                   child: Column(
@@ -356,8 +358,9 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                   ),
                 ),
               ),
-            );
-          },
+            ),
+          );
+        },
         );
       },
     );
@@ -389,14 +392,16 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
           builder: (context, setModalState) {
             final isAlreadyPaid = _isSalaryPaidForMonth(staff.id.toString(), selectedMonthYear);
 
-            return Padding(
-              padding: EdgeInsets.only(
-                top: 20,
-                left: 16,
-                right: 16,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-              ),
-              child: SingleChildScrollView(
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  top: 20,
+                  left: 16,
+                  right: 16,
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                ),
+                child: SingleChildScrollView(
                 child: Form(
                   key: formKey,
                   child: Column(
@@ -606,8 +611,9 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                   ),
                 ),
               ),
-            );
-          },
+            ),
+          );
+        },
         );
       },
     );
@@ -622,9 +628,11 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) {
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.75,
-          padding: const EdgeInsets.all(16),
+        return SafeArea(
+          top: false,
+          child: Container(
+            height: MediaQuery.of(context).size.height * 0.75,
+            padding: const EdgeInsets.all(16),
           child: Column(
             children: [
               Container(
@@ -680,8 +688,9 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
               ),
             ],
           ),
-        );
-      },
+        ),
+      );
+    },
     );
   }
 

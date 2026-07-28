@@ -132,9 +132,11 @@ class _StockInScreenState extends State<StockInScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return Container(
-              height: MediaQuery.of(context).size.height * 0.75,
-              padding: const EdgeInsets.all(16),
+            return SafeArea(
+              top: false,
+              child: Container(
+                height: MediaQuery.of(context).size.height * 0.75,
+                padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
                   Container(
@@ -239,8 +241,9 @@ class _StockInScreenState extends State<StockInScreen> {
                   ),
                 ],
               ),
-            );
-          },
+            ),
+          );
+        },
         );
       },
     );

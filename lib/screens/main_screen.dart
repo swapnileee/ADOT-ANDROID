@@ -29,6 +29,7 @@ class _MainScreenState extends State<MainScreen> {
       DashboardScreen(
         onNavigateToPOS: () => _navigateToTab(2),
         onNavigateToInventory: () => _navigateToTab(1),
+        onNavigateToOrders: () => _navigateToTab(3),
       ),
       const InventoryScreen(),
       const POSScreen(),

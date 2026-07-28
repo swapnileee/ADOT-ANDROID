@@ -15,11 +15,13 @@ import 'stock_in_screen.dart';
 class DashboardScreen extends StatefulWidget {
   final VoidCallback onNavigateToPOS;
   final VoidCallback onNavigateToInventory;
+  final VoidCallback? onNavigateToOrders;
 
   const DashboardScreen({
     super.key,
     required this.onNavigateToPOS,
     required this.onNavigateToInventory,
+    this.onNavigateToOrders,
   });
 
   // Brand Palette Constants
@@ -234,14 +236,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                left: 20,
-                right: 20,
-                top: 24,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-              ),
-              child: Form(
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 20,
+                  right: 20,
+                  top: 24,
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+                ),
+                child: Form(
                 key: formKey,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -335,8 +339,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
               ),
-            );
-          },
+            ),
+          );
+        },
         );
       },
     );
@@ -433,6 +438,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               )
             : SingleChildScrollView(
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     // 1. TOP CURVED HEADER
                     _buildTopHeader(context),
@@ -440,35 +446,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
                       child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           // 2. TODAY SUMMARY STRIP
                           _buildTodaySummaryStrip(),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 12),
 
                           // 3. MAIN CARDS: TODAY'S SALES
                           _buildMainMetricsCards(),
-                          const SizedBox(height: 14),
+                          const SizedBox(height: 12),
 
                           // 4. 2x2 GRID (PROFIT, EXPENSE, CASH, DUE)
                           _buildSecondaryMetricsGrid(),
-                          const SizedBox(height: 18),
+                          const SizedBox(height: 16),
 
                           // 5. QUICK ACTIONS
                           _buildQuickActions(),
-                          const SizedBox(height: 18),
+                          const SizedBox(height: 16),
 
                           // 6. IMPORTANT ALERTS
                           _buildAlertsSection(),
-                          const SizedBox(height: 18),
+                          const SizedBox(height: 16),
 
                           // 7. RECENT SALES
                           _buildRecentSalesSection(),
-                          const SizedBox(height: 18),
+                          const SizedBox(height: 16),
 
                           // 8. INVENTORY SUMMARY
                           _buildInventorySummaryCard(),
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 20),
                         ],
                       ),
                     ),
@@ -580,14 +587,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           const Text('আজকের সারসংক্ষেপ', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: DashboardScreen.textDark)),
           const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildStripItem(Icons.shopping_cart_outlined, '$_todayOrderCount টি', 'অর্ডার', const Color(0xFFE8F5E9), const Color(0xFF2E7D32)),
-              _buildStripItem(Icons.payments_outlined, '৳ ${_todaySales.toStringAsFixed(0)}', 'মোট বিক্রি', const Color(0xFFFFF3E0), const Color(0xFFEF6C00)),
-              _buildStripItem(Icons.people_outline, '৩ জন', 'বকেয়া গ্রাহক', const Color(0xFFFFEBEE), const Color(0xFFC62828)),
-              _buildStripItem(Icons.inventory_2_outlined, '$_lowStockCount টি', 'কম স্টক পণ্য', const Color(0xFFE3F2FD), const Color(0xFF1565C0)),
-            ],
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildStripItem(Icons.shopping_cart_outlined, '$_todayOrderCount টি', 'অর্ডার', const Color(0xFFE8F5E9), const Color(0xFF2E7D32)),
+                const SizedBox(width: 16),
+                _buildStripItem(Icons.payments_outlined, '৳ ${_todaySales.toStringAsFixed(0)}', 'মোট বিক্রি', const Color(0xFFFFF3E0), const Color(0xFFEF6C00)),
+                const SizedBox(width: 16),
+                _buildStripItem(Icons.people_outline, '৩ জন', 'বকেয়া গ্রাহক', const Color(0xFFFFEBEE), const Color(0xFFC62828)),
+                const SizedBox(width: 16),
+                _buildStripItem(Icons.inventory_2_outlined, '$_lowStockCount টি', 'কম স্টক পণ্য', const Color(0xFFE3F2FD), const Color(0xFF1565C0)),
+              ],
+            ),
           )
         ],
       ),
@@ -693,7 +705,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // 4. SECONDARY METRICS (2x2 GRID)
   Widget _buildSecondaryMetricsGrid() {
     return GridView.count(
       crossAxisCount: 2,
@@ -701,7 +712,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       physics: const NeverScrollableScrollPhysics(),
       crossAxisSpacing: 12,
       mainAxisSpacing: 12,
-      childAspectRatio: 1.4,
+      childAspectRatio: 1.55,
       children: [
         _buildSecondaryCard('নিট লাভ', '৳ ${_todayNetProfit.toStringAsFixed(0)}', '+১২% গতকালের তুলনায়', Icons.trending_up, const Color(0xFF2E7D32)),
         _buildSecondaryCard('মোট খরচ', '৳ ${_todayExpenses.toStringAsFixed(0)}', '-৮% গতকালের তুলনায়', Icons.trending_down, const Color(0xFFD32F2F)),
@@ -721,7 +732,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisAlignment: MainAxisAlignment.start,
         children: [
           Row(
             children: [
@@ -731,11 +742,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Icon(icon, size: 16, color: color),
               ),
               const SizedBox(width: 6),
-              Text(title, style: const TextStyle(fontSize: 12, color: Colors.black54, fontWeight: FontWeight.w600)),
+              Expanded(
+                child: Text(title, style: const TextStyle(fontSize: 12, color: Colors.black54, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+              ),
             ],
           ),
+          const SizedBox(height: 6),
           Text(amount, style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: color)),
-          Text(sub, style: const TextStyle(fontSize: 9, color: Colors.black38)),
+          const SizedBox(height: 4),
+          Text(sub, style: const TextStyle(fontSize: 9, color: Colors.black38), overflow: TextOverflow.ellipsis),
         ],
       ),
     );
@@ -872,7 +887,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // 7. RECENT SALES
   Widget _buildRecentSalesSection() {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
@@ -880,19 +895,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           const Text('সাম্প্রতিক বিক্রি', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: DashboardScreen.textDark)),
           const SizedBox(height: 10),
           _recentSales.isEmpty
               ? const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Center(child: Text('এখনও কোন বিক্রি রেকর্ড পাওয়া যায়নি', style: TextStyle(color: AppTheme.textMuted))),
+                  padding: EdgeInsets.symmetric(vertical: 12.0),
+                  child: Center(child: Text('এখনও কোন বিক্রি রেকর্ড পাওয়া যায়নি', style: TextStyle(color: AppTheme.textMuted, fontSize: 12))),
                 )
               : ListView.separated(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
+                  padding: EdgeInsets.zero,
                   itemCount: _recentSales.length > 3 ? 3 : _recentSales.length,
-                  separatorBuilder: (_, __) => const Divider(height: 16),
+                  separatorBuilder: (_, __) => const Divider(height: 12),
                   itemBuilder: (context, index) {
                     final sale = _recentSales[index];
                     final String timeStr = sale.createdAt != null ? DateFormat('h:mm a').format(sale.createdAt!) : 'আজ';
@@ -907,10 +924,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     );
                   },
                 ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Center(
             child: TextButton(
-              onPressed: widget.onNavigateToPOS,
+              onPressed: widget.onNavigateToOrders ?? widget.onNavigateToPOS,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              ),
               child: const Text('সকল বিক্রি দেখুন >', style: TextStyle(color: DashboardScreen.primaryGreen, fontSize: 12, fontWeight: FontWeight.bold)),
             ),
           )
@@ -948,7 +971,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // 8. INVENTORY SUMMARY
   Widget _buildInventorySummaryCard() {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
@@ -958,9 +981,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
           _buildInvCol('মোট পণ্য', '$_totalProductsটি', const Color(0xFF2E7D32)),
-          Container(height: 24, width: 1, color: Colors.black12),
+          Container(height: 20, width: 1, color: Colors.black12),
           _buildInvCol('কম স্টক', '$_lowStockCountটি', const Color(0xFFEF6C00)),
-          Container(height: 24, width: 1, color: Colors.black12),
+          Container(height: 20, width: 1, color: Colors.black12),
           _buildInvCol('আউট অফ স্টক', '$_outOfStockCountটি', const Color(0xFFC62828)),
         ],
       ),
