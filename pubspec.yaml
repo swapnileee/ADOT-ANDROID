@@ -15,6 +15,9 @@ dependencies:
   flutter_spinkit: ^5.2.0
   pdf: ^3.10.8
   printing: ^5.11.1
+  shared_preferences: ^2.2.2
+  image_picker: ^1.2.3
+  image_cropper: ^12.2.1
 
 dev_dependencies:
   flutter_test:

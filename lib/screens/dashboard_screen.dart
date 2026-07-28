@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../services/supabase_service.dart';
+import '../services/shop_info_service.dart';
 import '../widgets/custom_snackbar.dart';
 import '../models/sale_model.dart';
 import '../models/expense_model.dart';
@@ -510,13 +511,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
             tooltip: 'মেনু খুলুন',
           ),
           const SizedBox(width: 4),
-          const CircleAvatar(
-            radius: 19,
-            backgroundColor: Colors.white24,
-            child: Text(
-              'ADOT',
-              style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-            ),
+          ValueListenableBuilder<ShopInfo>(
+            valueListenable: ShopInfoService.shopInfoNotifier,
+            builder: (context, shopInfo, _) {
+              final logoImg = ShopInfoService.buildShopLogoImage(shopInfo.logoPath);
+              final hasLogo = logoImg != null;
+              return CircleAvatar(
+                radius: 19,
+                backgroundColor: Colors.white24,
+                backgroundImage: logoImg,
+                child: hasLogo
+                    ? null
+                    : const Text(
+                        'ADOT',
+                        style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+              );
+            },
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -524,9 +535,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'ADOT Organic Store',
-                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                ValueListenableBuilder<ShopInfo>(
+                  valueListenable: ShopInfoService.shopInfoNotifier,
+                  builder: (context, shopInfo, _) {
+                    return Text(
+                      shopInfo.name,
+                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    );
+                  },
                 ),
                 const SizedBox(height: 2),
                 Text(

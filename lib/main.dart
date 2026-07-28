@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config/supabase_config.dart';
+import 'services/shop_info_service.dart';
 import 'theme/app_theme.dart';
 import 'screens/main_screen.dart';
 
@@ -12,6 +13,9 @@ void main() async {
     url: SupabaseConfig.supabaseUrl,
     publishableKey: SupabaseConfig.supabaseAnonKey,
   );
+
+  // Load Shop Info from SharedPreferences & Supabase store_settings
+  await ShopInfoService.loadShopInfo();
 
   runApp(const AdotShopApp());
 }

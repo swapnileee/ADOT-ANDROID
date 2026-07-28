@@ -3,6 +3,7 @@ import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:intl/intl.dart';
 import '../services/supabase_service.dart';
 import '../services/pdf_report_service.dart';
+import '../services/shop_info_service.dart';
 import '../models/sale_model.dart';
 import '../models/expense_model.dart';
 import '../widgets/custom_snackbar.dart';
@@ -341,7 +342,7 @@ class _ReportScreenState extends State<ReportScreen> {
               child: RepaintBoundary(
                 key: _pdfReportKey,
                 child: PdfReportViewWidget(
-                  title: 'ADOT Organic Store',
+                  title: ShopInfoService.shopInfoNotifier.value.name,
                   dateRange: _exportPeriodTitle,
                   currentDate: DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now()),
                   totalSales: _exportSalesSum,

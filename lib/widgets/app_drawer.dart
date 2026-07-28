@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_spinkit/flutter_spinkit.dart';
-import 'package:intl/intl.dart';
-import '../services/supabase_service.dart';
-import '../widgets/custom_snackbar.dart';
 import '../theme/app_theme.dart';
+import '../services/shop_info_service.dart';
 import '../screens/report_screen.dart';
 import '../screens/low_stock_screen.dart';
 import '../screens/dues_screen.dart';
 import '../screens/stock_in_screen.dart';
 import '../screens/staff_management_screen.dart';
+import '../screens/settings_screen.dart';
 
 class AppDrawer extends StatefulWidget {
   final int currentTab;
@@ -27,36 +25,6 @@ class AppDrawer extends StatefulWidget {
 }
 
 class _AppDrawerState extends State<AppDrawer> {
-  final SupabaseService _supabaseService = SupabaseService();
-  bool _isSyncing = false;
-  String _lastSyncTimeText = 'আজ ${DateFormat('h:mm a').format(DateTime.now())}';
-
-  Future<void> _handleDataSync() async {
-    if (_isSyncing) return;
-
-    setState(() => _isSyncing = true);
-
-    try {
-      await _supabaseService.fetchDashboardStats();
-      if (widget.onRefreshData != null) {
-        widget.onRefreshData!();
-      }
-
-      if (!mounted) return;
-      setState(() {
-        _lastSyncTimeText = 'আজ ${DateFormat('h:mm a').format(DateTime.now())}';
-      });
-      CustomSnackBar.showSuccess(context, 'ডাটা সফলভাবে সিঙ্ক করা হয়েছে!');
-    } catch (e) {
-      if (!mounted) return;
-      CustomSnackBar.showError(context, 'ডাটা সিঙ্ক করতে ব্যর্থ হয়েছে: $e');
-    } finally {
-      if (mounted) {
-        setState(() => _isSyncing = false);
-      }
-    }
-  }
-
   void _navigateToScreen(Widget screen) {
     Navigator.pop(context); // Close drawer
     Navigator.push(
@@ -68,10 +36,6 @@ class _AppDrawerState extends State<AppDrawer> {
   void _selectTab(int tabIndex) {
     Navigator.pop(context); // Close drawer
     widget.onSelectTab(tabIndex);
-  }
-
-  void _showComingSoonToast(String featureName) {
-    CustomSnackBar.showInfo(context, '$featureName শীঘ্রই যুক্ত হচ্ছে!');
   }
 
   @override
@@ -107,44 +71,67 @@ class _AppDrawerState extends State<AppDrawer> {
               children: [
                 Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.storefront_rounded,
-                        color: Colors.white,
-                        size: 30,
-                      ),
+                    ValueListenableBuilder<ShopInfo>(
+                      valueListenable: ShopInfoService.shopInfoNotifier,
+                      builder: (context, shopInfo, _) {
+                        final logoImg = ShopInfoService.buildShopLogoImage(shopInfo.logoPath);
+                        final hasLogo = logoImg != null;
+                        return Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            shape: BoxShape.circle,
+                            image: hasLogo
+                                ? DecorationImage(
+                                    image: logoImg,
+                                    fit: BoxFit.cover,
+                                  )
+                                : null,
+                          ),
+                          child: hasLogo
+                              ? null
+                              : const Icon(
+                                  Icons.storefront_rounded,
+                                  color: Colors.white,
+                                  size: 28,
+                                ),
+                        );
+                      },
                     ),
                     const SizedBox(width: 14),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'ADOT Organic Store',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.3,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          SizedBox(height: 2),
-                          Text(
-                            'Organic Store Management',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
+                    Expanded(
+                      child: ValueListenableBuilder<ShopInfo>(
+                        valueListenable: ShopInfoService.shopInfoNotifier,
+                        builder: (context, shopInfo, _) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                shopInfo.name,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.3,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                shopInfo.address.isNotEmpty ? shopInfo.address : 'Organic Store Management',
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          );
+                        },
                       ),
                     ),
                   ],
@@ -269,23 +256,15 @@ class _AppDrawerState extends State<AppDrawer> {
                   icon: Icons.settings_outlined,
                   activeIcon: Icons.settings_rounded,
                   title: 'সেটিংস',
-                  subtitle: 'অ্যাপ ও প্রিন্টার কনফিগারেশন',
+                  subtitle: 'অ্যাপ ও সিঙ্ক সেটিংস',
                   isSelected: false,
-                  onTap: () => _showComingSoonToast('সেটিংস'),
-                ),
-                _buildDrawerCardItem(
-                  icon: Icons.cloud_sync_outlined,
-                  activeIcon: Icons.cloud_sync_rounded,
-                  title: 'ডেটা সিঙ্ক',
-                  subtitle: 'ক্লাউড ডেটা রিয়েলটাইম সিঙ্ক',
-                  isSelected: false,
-                  onTap: _handleDataSync,
+                  onTap: () => _navigateToScreen(const SettingsScreen()),
                 ),
               ],
             ),
           ),
 
-          // Drawer Footer & Full-Width Sync Button
+          // Drawer Footer
           Container(
             padding: const EdgeInsets.all(16),
             decoration: const BoxDecoration(
@@ -294,55 +273,16 @@ class _AppDrawerState extends State<AppDrawer> {
                 top: BorderSide(color: AppTheme.cardBorderColor, width: 1),
               ),
             ),
-            child: Column(
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton.icon(
-                    onPressed: _isSyncing ? null : _handleDataSync,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primaryGreen,
-                      foregroundColor: Colors.white,
-                      elevation: 1,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    icon: _isSyncing
-                        ? const SpinKitThreeBounce(color: Colors.white, size: 16)
-                        : const Icon(Icons.sync_rounded, size: 20),
-                    label: Text(
-                      _isSyncing ? 'সিঙ্ক হচ্ছে...' : '☁️ ডেটা সিঙ্ক করুন',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
                 Text(
-                  'সর্বশেষ সিঙ্ক: $_lastSyncTimeText',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppTheme.textMuted,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  'ADOT Digital Khata App',
+                  style: TextStyle(fontSize: 11, color: AppTheme.textMuted, fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(height: 8),
-                const Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'ADOT Digital Khata App',
-                      style: TextStyle(fontSize: 11, color: AppTheme.textMuted, fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      'v1.0.2 Build',
-                      style: TextStyle(fontSize: 11, color: AppTheme.textMuted, fontWeight: FontWeight.w600),
-                    ),
-                  ],
+                Text(
+                  'v1.0.2 Build',
+                  style: TextStyle(fontSize: 11, color: AppTheme.textMuted, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
