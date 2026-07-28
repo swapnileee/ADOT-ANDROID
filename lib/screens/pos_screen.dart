@@ -45,7 +45,8 @@ class _POSScreenState extends State<POSScreen> {
   double _paidAmount = 0.0;
 
   final TextEditingController _customerNameController = TextEditingController();
-  final TextEditingController _customerPhoneController = TextEditingController();
+  final TextEditingController _customerPhoneController =
+      TextEditingController();
   final TextEditingController _paidAmountController = TextEditingController();
 
   bool _isLoadingProducts = true;
@@ -104,7 +105,11 @@ class _POSScreenState extends State<POSScreen> {
     List<Product> temp = List.from(_products);
 
     if (_selectedCategoryFilter != 'সকল') {
-      temp = temp.where((p) => p.category.toLowerCase().contains(_selectedCategoryFilter.toLowerCase())).toList();
+      temp = temp
+          .where((p) => p.category
+              .toLowerCase()
+              .contains(_selectedCategoryFilter.toLowerCase()))
+          .toList();
     }
 
     if (_hideOutOfStock) {
@@ -113,7 +118,11 @@ class _POSScreenState extends State<POSScreen> {
 
     if (_searchQuery.trim().isNotEmpty) {
       final q = _searchQuery.trim().toLowerCase();
-      temp = temp.where((p) => p.name.toLowerCase().contains(q) || p.category.toLowerCase().contains(q)).toList();
+      temp = temp
+          .where((p) =>
+              p.name.toLowerCase().contains(q) ||
+              p.category.toLowerCase().contains(q))
+          .toList();
     }
 
     setState(() {
@@ -162,11 +171,14 @@ class _POSScreenState extends State<POSScreen> {
   void _addToCart(PosCartItem cartItem) {
     setState(() {
       final index = _cartItems.indexWhere(
-        (i) => i.product.id == cartItem.product.id && i.variant.id == cartItem.variant.id,
+        (i) =>
+            i.product.id == cartItem.product.id &&
+            i.variant.id == cartItem.variant.id,
       );
       if (index >= 0) {
         _cartItems[index].quantity += cartItem.quantity;
-        _cartItems[index].totalPrice = _cartItems[index].quantity * _cartItems[index].variant.price;
+        _cartItems[index].totalPrice =
+            _cartItems[index].quantity * _cartItems[index].variant.price;
       } else {
         _cartItems.add(cartItem);
       }
@@ -200,7 +212,8 @@ class _POSScreenState extends State<POSScreen> {
       if (index >= 0) {
         if (_cartItems[index].quantity > 1) {
           _cartItems[index].quantity--;
-          _cartItems[index].totalPrice = _cartItems[index].quantity * _cartItems[index].variant.price;
+          _cartItems[index].totalPrice =
+              _cartItems[index].quantity * _cartItems[index].variant.price;
         } else {
           _cartItems.removeAt(index);
         }
@@ -217,7 +230,8 @@ class _POSScreenState extends State<POSScreen> {
         _cartItems.removeAt(index);
       } else {
         if (newQty > currentItem.variant.stock) {
-          CustomSnackBar.showWarning(context, 'স্টক লিমিটের বেশি যোগ করা যাবে না');
+          CustomSnackBar.showWarning(
+              context, 'স্টক লিমিটের বেশি যোগ করা যাবে না');
           return;
         }
         currentItem.quantity = newQty;
@@ -241,12 +255,16 @@ class _POSScreenState extends State<POSScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            const Icon(Icons.error_outline_rounded, color: AppTheme.errorRed, size: 24),
+            const Icon(Icons.error_outline_rounded,
+                color: AppTheme.errorRed, size: 24),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 title,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.errorRed),
+                style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.errorRed),
               ),
             ),
           ],
@@ -260,7 +278,8 @@ class _POSScreenState extends State<POSScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('বন্ধ করুন', style: TextStyle(fontWeight: FontWeight.bold)),
+            child: const Text('বন্ধ করুন',
+                style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -269,7 +288,8 @@ class _POSScreenState extends State<POSScreen> {
 
   Future<void> _submitCheckout() async {
     if (_cartItems.isEmpty) {
-      CustomSnackBar.showWarning(context, 'অনুগ্রহ করে কার্টে অন্তত একটি পণ্য যোগ করুন');
+      CustomSnackBar.showWarning(
+          context, 'অনুগ্রহ করে কার্টে অন্তত একটি পণ্য যোগ করুন');
       return;
     }
 
@@ -278,8 +298,12 @@ class _POSScreenState extends State<POSScreen> {
     setState(() => _isSubmitting = true);
 
     try {
-      final customerName = _customerNameController.text.trim().isEmpty ? 'নগদ ক্রেতা' : _customerNameController.text.trim();
-      final customerPhone = _customerPhoneController.text.trim().isEmpty ? null : _customerPhoneController.text.trim();
+      final customerName = _customerNameController.text.trim().isEmpty
+          ? 'নগদ ক্রেতা'
+          : _customerNameController.text.trim();
+      final customerPhone = _customerPhoneController.text.trim().isEmpty
+          ? null
+          : _customerPhoneController.text.trim();
 
       final List<Map<String, dynamic>> payload = _cartItems.map((item) {
         return {
@@ -306,7 +330,8 @@ class _POSScreenState extends State<POSScreen> {
       _loadProducts(); // Refresh stocks
     } on PostgrestException catch (e) {
       if (!mounted) return;
-      debugPrint('SUPABASE POSTGREST ERROR: ${e.message} | Details: ${e.details} | Code: ${e.code}');
+      debugPrint(
+          'SUPABASE POSTGREST ERROR: ${e.message} | Details: ${e.details} | Code: ${e.code}');
       _showErrorDialog(
         context,
         'Supabase Postgrest Error (${e.code})',
@@ -348,7 +373,10 @@ class _POSScreenState extends State<POSScreen> {
             children: [
               Text(
                 product.cleanName,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primaryGreen),
+                style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.primaryGreen),
               ),
               Text(
                 'ক্যাটেগরি: ${product.category} • স্টক: ${product.formattedStock}',
@@ -356,7 +384,8 @@ class _POSScreenState extends State<POSScreen> {
               ),
               const Divider(height: 20),
               ListTile(
-                leading: const Icon(Icons.info_outline_rounded, color: AppTheme.primaryGreen),
+                leading: const Icon(Icons.info_outline_rounded,
+                    color: AppTheme.primaryGreen),
                 title: const Text('পণ্য বিবরণী (View Details)'),
                 onTap: () {
                   Navigator.pop(context);
@@ -364,19 +393,23 @@ class _POSScreenState extends State<POSScreen> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.edit_outlined, color: Color(0xFF2563EB)),
+                leading:
+                    const Icon(Icons.edit_outlined, color: Color(0xFF2563EB)),
                 title: const Text('পণ্য এডিট (Edit Product)'),
                 onTap: () async {
                   Navigator.pop(context);
                   final res = await Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => AddProductScreen(productToEdit: product)),
+                    MaterialPageRoute(
+                        builder: (context) =>
+                            AddProductScreen(productToEdit: product)),
                   );
                   if (res == true) _loadProducts();
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.inventory_2_outlined, color: AppTheme.warningOrange),
+                leading: const Icon(Icons.inventory_2_outlined,
+                    color: AppTheme.warningOrange),
                 title: const Text('স্টক আপডেট (Update Stock)'),
                 onTap: () {
                   Navigator.pop(context);
@@ -384,8 +417,10 @@ class _POSScreenState extends State<POSScreen> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.delete_outline_rounded, color: AppTheme.errorRed),
-                title: const Text('পণ্য মুছুন (Delete Product)', style: TextStyle(color: AppTheme.errorRed)),
+                leading: const Icon(Icons.delete_outline_rounded,
+                    color: AppTheme.errorRed),
+                title: const Text('পণ্য মুছুন (Delete Product)',
+                    style: TextStyle(color: AppTheme.errorRed)),
                 onTap: () {
                   Navigator.pop(context);
                   _confirmDeleteProduct(product);
@@ -402,7 +437,8 @@ class _POSScreenState extends State<POSScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(product.cleanName, style: const TextStyle(color: AppTheme.primaryGreen)),
+        title: Text(product.cleanName,
+            style: const TextStyle(color: AppTheme.primaryGreen)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -412,12 +448,16 @@ class _POSScreenState extends State<POSScreen> {
             Text('মোট স্টক: ${product.formattedStock}'),
             Text('মূল্য পরিসর: ${product.priceRangeText}'),
             const SizedBox(height: 10),
-            const Text('ভ্যারিয়েন্টসমূহ:', style: TextStyle(fontWeight: FontWeight.bold)),
-            ...product.variants.map((v) => Text('• ${v.sizeLabel}: ৳${v.price.toStringAsFixed(0)} (স্টক: ${v.stock.toInt()})')),
+            const Text('ভ্যারিয়েন্টসমূহ:',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            ...product.variants.map((v) => Text(
+                '• ${v.sizeLabel}: ৳${v.price.toStringAsFixed(0)} (স্টক: ${v.stock.toInt()})')),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('বন্ধ করুন')),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('বন্ধ করুন')),
         ],
       ),
     );
@@ -432,10 +472,13 @@ class _POSScreenState extends State<POSScreen> {
         content: TextField(
           controller: controller,
           keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'নতুন যোগ করার পরিমাণ (Base Unit)'),
+          decoration: const InputDecoration(
+              labelText: 'নতুন যোগ করার পরিমাণ (Base Unit)'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('বাতিল')),
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('বাতিল')),
           ElevatedButton(
             onPressed: () async {
               final val = double.tryParse(controller.text.trim()) ?? 0;
@@ -461,14 +504,17 @@ class _POSScreenState extends State<POSScreen> {
         title: const Text('পণ্য মুছে ফেলা নিশ্চিত করুন'),
         content: Text('আপনি কি সত্যিই "${product.cleanName}" ডিলিট করতে চান?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('বাতিল')),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('বাতিল')),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
               CustomSnackBar.showSuccess(context, 'পণ্য মুছে ফেলা হয়েছে');
               _loadProducts();
             },
-            child: const Text('মুছুন', style: TextStyle(color: AppTheme.errorRed)),
+            child:
+                const Text('মুছুন', style: TextStyle(color: AppTheme.errorRed)),
           ),
         ],
       ),
@@ -496,6 +542,7 @@ class _POSScreenState extends State<POSScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: AppTheme.creamBg,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -503,306 +550,386 @@ class _POSScreenState extends State<POSScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                left: 16,
-                right: 16,
-                top: 16,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-              ),
-              child: SingleChildScrollView(
-                child: Form(
-                  key: _checkoutFormKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Header Row (FIXED TOP)
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(Icons.shopping_cart_rounded, color: AppTheme.primaryGreen),
-                              const SizedBox(width: 8),
-                              const Text(
-                                'বিক্রি কার্ট ও চেকআউট',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppTheme.primaryGreen,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.primaryGreen.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Text(
-                                  '$_cartTotalItemCountটি',
-                                  style: const TextStyle(
-                                    fontSize: 12,
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 16,
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 8,
+                ),
+                child: SingleChildScrollView(
+                  child: Form(
+                    key: _checkoutFormKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Header Row (FIXED TOP)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.shopping_cart_rounded,
+                                    color: AppTheme.primaryGreen),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'বিক্রি কার্ট ও চেকআউট',
+                                  style: TextStyle(
+                                    fontSize: 18,
                                     fontWeight: FontWeight.bold,
                                     color: AppTheme.primaryGreen,
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.close_rounded),
-                            onPressed: () => Navigator.pop(context),
-                          ),
-                        ],
-                      ),
-
-                      const Divider(height: 12),
-
-                      // Cart Items List (INDEPENDENTLY SCROLLABLE MIDDLE CONTAINER)
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(
-                          maxHeight: 180,
-                        ),
-                      child: _cartItems.isEmpty
-                          ? const Padding(
-                              padding: EdgeInsets.all(24.0),
-                              child: Center(
-                                child: Text(
-                                  'কার্ট খালি রয়েছে',
-                                  style: TextStyle(color: AppTheme.textMuted, fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                            )
-                          : ListView.builder(
-                              shrinkWrap: true,
-                              itemCount: _cartItems.length,
-                              itemBuilder: (context, index) {
-                                final item = _cartItems[index];
-                                return Card(
-                                  margin: const EdgeInsets.only(bottom: 8),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(10.0),
-                                    child: Row(
-                                      children: [
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                item.displayTitle,
-                                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                              ),
-                                              const SizedBox(height: 2),
-                                              Text(
-                                                'একক মূল্য: ৳${item.variant.price.toStringAsFixed(0)}',
-                                                style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        // Quantity Adjuster Controls (-) counter (+)
-                                        Container(
-                                          decoration: BoxDecoration(
-                                            color: AppTheme.lightGreenBg,
-                                            borderRadius: BorderRadius.circular(8),
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              InkWell(
-                                                onTap: () {
-                                                  _updateCartItemQuantity(index, -1);
-                                                  setModalState(() {});
-                                                },
-                                                child: const Padding(
-                                                  padding: EdgeInsets.all(6.0),
-                                                  child: Icon(Icons.remove, size: 16, color: AppTheme.errorRed),
-                                                ),
-                                              ),
-                                              Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                                                child: Text(
-                                                  '${item.quantity}',
-                                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                                ),
-                                              ),
-                                              InkWell(
-                                                onTap: () {
-                                                  _updateCartItemQuantity(index, 1);
-                                                  setModalState(() {});
-                                                },
-                                                child: const Padding(
-                                                  padding: EdgeInsets.all(6.0),
-                                                  child: Icon(Icons.add, size: 16, color: AppTheme.primaryGreen),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Text(
-                                          '৳${item.totalPrice.toStringAsFixed(0)}',
-                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.primaryGreen),
-                                        ),
-                                        IconButton(
-                                          icon: const Icon(Icons.delete_outline_rounded, color: AppTheme.errorRed, size: 20),
-                                          onPressed: () {
-                                            _removeFromCart(index);
-                                            setModalState(() {});
-                                          },
-                                        ),
-                                      ],
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.primaryGreen
+                                        .withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    '$_cartTotalItemCountটি',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppTheme.primaryGreen,
                                     ),
                                   ),
-                                );
-                              },
+                                ),
+                              ],
                             ),
-                    ),
+                            IconButton(
+                              icon: const Icon(Icons.close_rounded),
+                              onPressed: () => Navigator.pop(context),
+                            ),
+                          ],
+                        ),
 
-                    const SizedBox(height: 10),
+                        const Divider(height: 12),
 
-                    // Checkout Inputs Container with Payment Method Selection (FIXED BOTTOM)
-                    Card(
-                      color: Colors.white,
-                      child: Padding(
-                          padding: const EdgeInsets.all(14.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text('সর্বমোট মূল্য:', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                                  Text(
-                                    '৳ ${_cartTotal.toStringAsFixed(0)}',
-                                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.primaryGreen),
+                        // Cart Items List (INDEPENDENTLY SCROLLABLE MIDDLE CONTAINER)
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(
+                            maxHeight: 180,
+                          ),
+                          child: _cartItems.isEmpty
+                              ? const Padding(
+                                  padding: EdgeInsets.all(24.0),
+                                  child: Center(
+                                    child: Text(
+                                      'কার্ট খালি রয়েছে',
+                                      style: TextStyle(
+                                          color: AppTheme.textMuted,
+                                          fontWeight: FontWeight.bold),
+                                    ),
                                   ),
-                                ],
-                              ),
-                              const Divider(height: 16),
-
-                              // Payment Method Selection Chips
-                              const Text(
-                                'পেমেন্ট মাধ্যম (Payment Method):',
-                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textDark),
-                              ),
-                              const SizedBox(height: 6),
-                              Row(
-                                children: _paymentMethods.map((method) {
-                                  final isSelected = _selectedPaymentMethod == method;
-                                  return Padding(
-                                    padding: const EdgeInsets.only(right: 6.0),
-                                    child: ChoiceChip(
-                                      label: Text(method),
-                                      selected: isSelected,
-                                      selectedColor: AppTheme.primaryGreen,
-                                      backgroundColor: AppTheme.creamBg,
-                                      labelStyle: TextStyle(
-                                        color: isSelected ? Colors.white : AppTheme.textDark,
-                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                        fontSize: 12,
+                                )
+                              : ListView.builder(
+                                  shrinkWrap: true,
+                                  itemCount: _cartItems.length,
+                                  itemBuilder: (context, index) {
+                                    final item = _cartItems[index];
+                                    return Card(
+                                      margin: const EdgeInsets.only(bottom: 8),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(10.0),
+                                        child: Row(
+                                          children: [
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    item.displayTitle,
+                                                    style: const TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        fontSize: 14),
+                                                  ),
+                                                  const SizedBox(height: 2),
+                                                  Text(
+                                                    'একক মূল্য: ৳${item.variant.price.toStringAsFixed(0)}',
+                                                    style: const TextStyle(
+                                                        fontSize: 12,
+                                                        color:
+                                                            AppTheme.textMuted),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            // Quantity Adjuster Controls (-) counter (+)
+                                            Container(
+                                              decoration: BoxDecoration(
+                                                color: AppTheme.lightGreenBg,
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                              child: Row(
+                                                children: [
+                                                  InkWell(
+                                                    onTap: () {
+                                                      _updateCartItemQuantity(
+                                                          index, -1);
+                                                      setModalState(() {});
+                                                    },
+                                                    child: const Padding(
+                                                      padding:
+                                                          EdgeInsets.all(6.0),
+                                                      child: Icon(Icons.remove,
+                                                          size: 16,
+                                                          color: AppTheme
+                                                              .errorRed),
+                                                    ),
+                                                  ),
+                                                  Padding(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                        horizontal: 8.0),
+                                                    child: Text(
+                                                      '${item.quantity}',
+                                                      style: const TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          fontSize: 14),
+                                                    ),
+                                                  ),
+                                                  InkWell(
+                                                    onTap: () {
+                                                      _updateCartItemQuantity(
+                                                          index, 1);
+                                                      setModalState(() {});
+                                                    },
+                                                    child: const Padding(
+                                                      padding:
+                                                          EdgeInsets.all(6.0),
+                                                      child: Icon(Icons.add,
+                                                          size: 16,
+                                                          color: AppTheme
+                                                              .primaryGreen),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Text(
+                                              '৳${item.totalPrice.toStringAsFixed(0)}',
+                                              style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 14,
+                                                  color: AppTheme.primaryGreen),
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(
+                                                  Icons.delete_outline_rounded,
+                                                  color: AppTheme.errorRed,
+                                                  size: 20),
+                                              onPressed: () {
+                                                _removeFromCart(index);
+                                                setModalState(() {});
+                                              },
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                      onSelected: (val) {
-                                        if (val) {
-                                          setModalState(() {
-                                            _selectedPaymentMethod = method;
-                                          });
-                                        }
-                                      },
-                                    ),
-                                  );
-                                }).toList(),
-                              ),
+                                    );
+                                  },
+                                ),
+                        ),
 
-                              const SizedBox(height: 12),
+                        const SizedBox(height: 10),
 
-                              TextFormField(
-                                controller: _customerNameController,
-                                decoration: const InputDecoration(
-                                  labelText: 'ক্রেতার নাম (ঐচ্ছিক)',
-                                  prefixIcon: Icon(Icons.person_outline_rounded, color: AppTheme.primaryGreen),
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              TextFormField(
-                                controller: _customerPhoneController,
-                                keyboardType: TextInputType.phone,
-                                decoration: const InputDecoration(
-                                  labelText: 'ক্রেতার মোবাইল নম্বর (ঐচ্ছিক)',
-                                  prefixIcon: Icon(Icons.phone_rounded, color: AppTheme.primaryGreen),
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              TextFormField(
-                                controller: _paidAmountController,
-                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                decoration: const InputDecoration(
-                                  labelText: 'জমা/পরিশোধিত টাকা (৳)',
-                                  prefixIcon: Icon(Icons.payments_outlined, color: AppTheme.primaryGreen),
-                                ),
-                                onChanged: (val) {
-                                  setState(() {
-                                    _paidAmount = double.tryParse(val) ?? 0.0;
-                                  });
-                                  setModalState(() {});
-                                },
-                              ),
-                              const SizedBox(height: 10),
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: _dueAmount > 0 ? const Color(0xFFFEF3C7) : AppTheme.lightGreenBg,
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        // Checkout Inputs Container with Payment Method Selection (FIXED BOTTOM)
+                        Card(
+                          color: Colors.white,
+                          child: Padding(
+                            padding: const EdgeInsets.all(14.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
+                                    const Text('সর্বমোট মূল্য:',
+                                        style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.bold)),
                                     Text(
-                                      _dueAmount > 0 ? 'বকেয়া পরিমাণ:' : 'পরিশোধের অবস্থা:',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: _dueAmount > 0 ? AppTheme.warningOrange : AppTheme.primaryGreen,
-                                      ),
-                                    ),
-                                    Text(
-                                      _dueAmount > 0 ? '৳ ${_dueAmount.toStringAsFixed(0)}' : 'সম্পূর্ণ পরিশোধিত',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                        color: _dueAmount > 0 ? AppTheme.warningOrange : AppTheme.primaryGreen,
-                                      ),
+                                      '৳ ${_cartTotal.toStringAsFixed(0)}',
+                                      style: const TextStyle(
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppTheme.primaryGreen),
                                     ),
                                   ],
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                                const Divider(height: 16),
 
-                      const SizedBox(height: 16),
-
-                      // Submit Checkout Button
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: ElevatedButton.icon(
-                          onPressed: _isSubmitting || _cartItems.isEmpty ? null : _submitCheckout,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.primaryGreen,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          icon: _isSubmitting ? const SizedBox.shrink() : const Icon(Icons.check_circle_rounded, color: Colors.white),
-                          label: _isSubmitting
-                              ? const SpinKitThreeBounce(color: Colors.white, size: 22)
-                              : const Text(
-                                  'বিক্রি নিশ্চিত করুন ও ইনভয়েস জমা দিন',
-                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                                // Payment Method Selection Chips
+                                const Text(
+                                  'পেমেন্ট মাধ্যম (Payment Method):',
+                                  style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppTheme.textDark),
                                 ),
+                                const SizedBox(height: 6),
+                                Row(
+                                  children: _paymentMethods.map((method) {
+                                    final isSelected =
+                                        _selectedPaymentMethod == method;
+                                    return Padding(
+                                      padding:
+                                          const EdgeInsets.only(right: 6.0),
+                                      child: ChoiceChip(
+                                        label: Text(method),
+                                        selected: isSelected,
+                                        selectedColor: AppTheme.primaryGreen,
+                                        backgroundColor: AppTheme.creamBg,
+                                        labelStyle: TextStyle(
+                                          color: isSelected
+                                              ? Colors.white
+                                              : AppTheme.textDark,
+                                          fontWeight: isSelected
+                                              ? FontWeight.bold
+                                              : FontWeight.normal,
+                                          fontSize: 12,
+                                        ),
+                                        onSelected: (val) {
+                                          if (val) {
+                                            setModalState(() {
+                                              _selectedPaymentMethod = method;
+                                            });
+                                          }
+                                        },
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+
+                                const SizedBox(height: 12),
+
+                                TextFormField(
+                                  controller: _customerNameController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'ক্রেতার নাম (ঐচ্ছিক)',
+                                    prefixIcon: Icon(
+                                        Icons.person_outline_rounded,
+                                        color: AppTheme.primaryGreen),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                TextFormField(
+                                  controller: _customerPhoneController,
+                                  keyboardType: TextInputType.phone,
+                                  decoration: const InputDecoration(
+                                    labelText: 'ক্রেতার মোবাইল নম্বর (ঐচ্ছিক)',
+                                    prefixIcon: Icon(Icons.phone_rounded,
+                                        color: AppTheme.primaryGreen),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                TextFormField(
+                                  controller: _paidAmountController,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                          decimal: true),
+                                  decoration: const InputDecoration(
+                                    labelText: 'জমা/পরিশোধিত টাকা (৳)',
+                                    prefixIcon: Icon(Icons.payments_outlined,
+                                        color: AppTheme.primaryGreen),
+                                  ),
+                                  onChanged: (val) {
+                                    setState(() {
+                                      _paidAmount = double.tryParse(val) ?? 0.0;
+                                    });
+                                    setModalState(() {});
+                                  },
+                                ),
+                                const SizedBox(height: 10),
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: _dueAmount > 0
+                                        ? const Color(0xFFFEF3C7)
+                                        : AppTheme.lightGreenBg,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        _dueAmount > 0
+                                            ? 'বকেয়া পরিমাণ:'
+                                            : 'পরিশোধের অবস্থা:',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: _dueAmount > 0
+                                              ? AppTheme.warningOrange
+                                              : AppTheme.primaryGreen,
+                                        ),
+                                      ),
+                                      Text(
+                                        _dueAmount > 0
+                                            ? '৳ ${_dueAmount.toStringAsFixed(0)}'
+                                            : 'সম্পূর্ণ পরিশোধিত',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                          color: _dueAmount > 0
+                                              ? AppTheme.warningOrange
+                                              : AppTheme.primaryGreen,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
+
+                        const SizedBox(height: 16),
+
+                        // Submit Checkout Button
+                        SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: ElevatedButton.icon(
+                            onPressed: _isSubmitting || _cartItems.isEmpty
+                                ? null
+                                : _submitCheckout,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.primaryGreen,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                            ),
+                            icon: _isSubmitting
+                                ? const SizedBox.shrink()
+                                : const Icon(Icons.check_circle_rounded,
+                                    color: Colors.white),
+                            label: _isSubmitting
+                                ? const SpinKitThreeBounce(
+                                    color: Colors.white, size: 22)
+                                : const Text(
+                                    'বিক্রি নিশ্চিত করুন ও ইনভয়েস জমা দিন',
+                                    style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white),
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -843,7 +970,8 @@ class _POSScreenState extends State<POSScreen> {
                     color: Colors.white.withValues(alpha: 0.2),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.shopping_cart_rounded, color: Colors.white, size: 20),
+                  child: const Icon(Icons.shopping_cart_rounded,
+                      color: Colors.white, size: 20),
                 ),
                 const SizedBox(width: 12),
                 Column(
@@ -852,11 +980,17 @@ class _POSScreenState extends State<POSScreen> {
                   children: [
                     Text(
                       '🛒 $_cartTotalItemCount টি পণ্য',
-                      style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600),
                     ),
                     Text(
                       'মোট: ৳ ${_cartTotal.toStringAsFixed(0)}',
-                      style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
@@ -868,18 +1002,24 @@ class _POSScreenState extends State<POSScreen> {
                 backgroundColor: Colors.white,
                 foregroundColor: AppTheme.primaryGreen,
                 elevation: 0,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
               ),
               child: const Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     'কার্ট ও চেকআউট',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.primaryGreen),
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: AppTheme.primaryGreen),
                   ),
                   SizedBox(width: 4),
-                  Icon(Icons.arrow_forward_ios_rounded, size: 12, color: AppTheme.primaryGreen),
+                  Icon(Icons.arrow_forward_ios_rounded,
+                      size: 12, color: AppTheme.primaryGreen),
                 ],
               ),
             ),
@@ -908,7 +1048,9 @@ class _POSScreenState extends State<POSScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: _cartItems.isNotEmpty ? SafeArea(child: _buildFloatingCartBar()) : null,
+      bottomNavigationBar: _cartItems.isNotEmpty
+          ? SafeArea(child: _buildFloatingCartBar())
+          : null,
       body: SafeArea(
         child: _isLoadingProducts
             ? const Center(
@@ -939,7 +1081,8 @@ class _POSScreenState extends State<POSScreen> {
             },
             decoration: const InputDecoration(
               hintText: 'পণ্যের নাম বা ক্যাটেগরি দিয়ে খুঁজুন...',
-              prefixIcon: Icon(Icons.search_rounded, color: AppTheme.primaryGreen),
+              prefixIcon:
+                  Icon(Icons.search_rounded, color: AppTheme.primaryGreen),
               fillColor: Colors.white,
               filled: true,
             ),
@@ -962,7 +1105,8 @@ class _POSScreenState extends State<POSScreen> {
                     backgroundColor: Colors.white,
                     labelStyle: TextStyle(
                       color: isSelected ? Colors.white : AppTheme.textDark,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      fontWeight:
+                          isSelected ? FontWeight.bold : FontWeight.normal,
                       fontSize: 12,
                     ),
                     onSelected: (selected) {
@@ -996,7 +1140,10 @@ class _POSScreenState extends State<POSScreen> {
               ),
               const Text(
                 'স্টক শেষ পণ্য লুকান (Hide Out of Stock)',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textDark),
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textDark),
               ),
             ],
           ),
@@ -1007,7 +1154,9 @@ class _POSScreenState extends State<POSScreen> {
           _filteredProducts.isEmpty
               ? const Padding(
                   padding: EdgeInsets.all(32.0),
-                  child: Center(child: Text('কোন পণ্য পাওয়া যায়নি', style: TextStyle(color: AppTheme.textMuted))),
+                  child: Center(
+                      child: Text('কোন পণ্য পাওয়া যায়নি',
+                          style: TextStyle(color: AppTheme.textMuted))),
                 )
               : ListView.builder(
                   shrinkWrap: true,
@@ -1023,25 +1172,40 @@ class _POSScreenState extends State<POSScreen> {
                     if (isOutOfStock) {
                       stockStatusBadge = const Row(
                         children: [
-                          Icon(Icons.circle, color: AppTheme.errorRed, size: 10),
+                          Icon(Icons.circle,
+                              color: AppTheme.errorRed, size: 10),
                           SizedBox(width: 4),
-                          Text('স্টক শেষ', style: TextStyle(fontSize: 11, color: AppTheme.errorRed, fontWeight: FontWeight.bold)),
+                          Text('স্টক শেষ',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppTheme.errorRed,
+                                  fontWeight: FontWeight.bold)),
                         ],
                       );
                     } else if (product.totalStock <= 5) {
                       stockStatusBadge = Row(
                         children: [
-                          const Icon(Icons.circle, color: AppTheme.warningOrange, size: 10),
+                          const Icon(Icons.circle,
+                              color: AppTheme.warningOrange, size: 10),
                           const SizedBox(width: 4),
-                          Text('কম স্টক (${product.totalStock.toInt()}টি)', style: const TextStyle(fontSize: 11, color: AppTheme.warningOrange, fontWeight: FontWeight.bold)),
+                          Text('কম স্টক (${product.totalStock.toInt()}টি)',
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppTheme.warningOrange,
+                                  fontWeight: FontWeight.bold)),
                         ],
                       );
                     } else {
                       stockStatusBadge = Row(
                         children: [
-                          const Icon(Icons.circle, color: AppTheme.primaryGreen, size: 10),
+                          const Icon(Icons.circle,
+                              color: AppTheme.primaryGreen, size: 10),
                           const SizedBox(width: 4),
-                          Text('ইন স্টক (${product.totalStock.toInt()}টি)', style: const TextStyle(fontSize: 11, color: AppTheme.primaryGreen, fontWeight: FontWeight.w600)),
+                          Text('ইন স্টক (${product.totalStock.toInt()}টি)',
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppTheme.primaryGreen,
+                                  fontWeight: FontWeight.w600)),
                         ],
                       );
                     }
@@ -1069,9 +1233,12 @@ class _POSScreenState extends State<POSScreen> {
                                       ? Image.network(
                                           product.imageUrl,
                                           fit: BoxFit.cover,
-                                          errorBuilder: (_, __, ___) => const Icon(Icons.eco_rounded, color: AppTheme.primaryGreen),
+                                          errorBuilder: (_, __, ___) =>
+                                              const Icon(Icons.eco_rounded,
+                                                  color: AppTheme.primaryGreen),
                                         )
-                                      : const Icon(Icons.eco_rounded, color: AppTheme.primaryGreen),
+                                      : const Icon(Icons.eco_rounded,
+                                          color: AppTheme.primaryGreen),
                                 ),
                               ),
 
@@ -1084,12 +1251,17 @@ class _POSScreenState extends State<POSScreen> {
                                   children: [
                                     Text(
                                       product.cleanName,
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14),
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
                                       product.priceRangeText,
-                                      style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryGreen, fontSize: 13),
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: AppTheme.primaryGreen,
+                                          fontSize: 13),
                                     ),
                                     const SizedBox(height: 4),
                                     stockStatusBadge,
@@ -1100,12 +1272,17 @@ class _POSScreenState extends State<POSScreen> {
                               // Right Action Widget: Circular Add (+) button or Inline Quantity Picker [-] X [+]
                               if (isOutOfStock)
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 6),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFFFEE2E2),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
-                                  child: const Text('অপ্রাপ্য', style: TextStyle(fontSize: 11, color: AppTheme.errorRed, fontWeight: FontWeight.bold)),
+                                  child: const Text('অপ্রাপ্য',
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: AppTheme.errorRed,
+                                          fontWeight: FontWeight.bold)),
                                 )
                               else if (cartQty == 0)
                                 InkWell(
@@ -1117,41 +1294,55 @@ class _POSScreenState extends State<POSScreen> {
                                       color: AppTheme.primaryGreen,
                                       shape: BoxShape.circle,
                                     ),
-                                    child: const Icon(Icons.add, color: Colors.white, size: 22),
+                                    child: const Icon(Icons.add,
+                                        color: Colors.white, size: 22),
                                   ),
                                 )
                               else
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 4, vertical: 2),
                                   decoration: BoxDecoration(
                                     color: AppTheme.lightGreenBg,
                                     borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(color: AppTheme.primaryGreen.withValues(alpha: 0.3)),
+                                    border: Border.all(
+                                        color: AppTheme.primaryGreen
+                                            .withValues(alpha: 0.3)),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       InkWell(
-                                        onTap: () => _quickDecrementProduct(product),
+                                        onTap: () =>
+                                            _quickDecrementProduct(product),
                                         borderRadius: BorderRadius.circular(14),
                                         child: const Padding(
                                           padding: EdgeInsets.all(4.0),
-                                          child: Icon(Icons.remove, size: 18, color: AppTheme.errorRed),
+                                          child: Icon(Icons.remove,
+                                              size: 18,
+                                              color: AppTheme.errorRed),
                                         ),
                                       ),
                                       Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8.0),
                                         child: Text(
                                           '$cartQty',
-                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.primaryGreen),
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14,
+                                              color: AppTheme.primaryGreen),
                                         ),
                                       ),
                                       InkWell(
-                                        onTap: () => _quickAddDefaultVariant(product),
+                                        onTap: () =>
+                                            _quickAddDefaultVariant(product),
                                         borderRadius: BorderRadius.circular(14),
                                         child: const Padding(
                                           padding: EdgeInsets.all(4.0),
-                                          child: Icon(Icons.add, size: 18, color: AppTheme.primaryGreen),
+                                          child: Icon(Icons.add,
+                                              size: 18,
+                                              color: AppTheme.primaryGreen),
                                         ),
                                       ),
                                     ],
@@ -1181,7 +1372,8 @@ class _PosVariantSelectionModal extends StatefulWidget {
   });
 
   @override
-  State<_PosVariantSelectionModal> createState() => _PosVariantSelectionModalState();
+  State<_PosVariantSelectionModal> createState() =>
+      _PosVariantSelectionModalState();
 }
 
 class _PosVariantSelectionModalState extends State<_PosVariantSelectionModal> {
@@ -1252,9 +1444,12 @@ class _PosVariantSelectionModalState extends State<_PosVariantSelectionModal> {
                       ? Image.network(
                           widget.product.imageUrl,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const Icon(Icons.eco_rounded, color: AppTheme.primaryGreen),
+                          errorBuilder: (_, __, ___) => const Icon(
+                              Icons.eco_rounded,
+                              color: AppTheme.primaryGreen),
                         )
-                      : const Icon(Icons.eco_rounded, color: AppTheme.primaryGreen),
+                      : const Icon(Icons.eco_rounded,
+                          color: AppTheme.primaryGreen),
                 ),
               ),
               const SizedBox(width: 12),
@@ -1264,11 +1459,13 @@ class _PosVariantSelectionModalState extends State<_PosVariantSelectionModal> {
                   children: [
                     Text(
                       widget.product.cleanName,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                     Text(
                       'মোট স্টক: ${widget.product.formattedStock}',
-                      style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                      style: const TextStyle(
+                          fontSize: 12, color: AppTheme.textMuted),
                     ),
                   ],
                 ),
@@ -1281,7 +1478,10 @@ class _PosVariantSelectionModalState extends State<_PosVariantSelectionModal> {
           // Dynamic Variant Grid Selector Cards
           const Text(
             'ভ্যারিয়েন্ট বাছাই করুন:',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textDark),
+            style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textDark),
           ),
 
           const SizedBox(height: 8),
@@ -1308,12 +1508,15 @@ class _PosVariantSelectionModalState extends State<_PosVariantSelectionModal> {
                 },
                 borderRadius: BorderRadius.circular(12),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   decoration: BoxDecoration(
                     color: isSelected ? AppTheme.primaryGreen : Colors.white,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: isSelected ? AppTheme.primaryGreen : AppTheme.cardBorderColor,
+                      color: isSelected
+                          ? AppTheme.primaryGreen
+                          : AppTheme.cardBorderColor,
                       width: isSelected ? 2 : 1,
                     ),
                   ),
@@ -1330,7 +1533,9 @@ class _PosVariantSelectionModalState extends State<_PosVariantSelectionModal> {
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 13,
-                                color: isSelected ? Colors.white : AppTheme.textDark,
+                                color: isSelected
+                                    ? Colors.white
+                                    : AppTheme.textDark,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -1340,14 +1545,17 @@ class _PosVariantSelectionModalState extends State<_PosVariantSelectionModal> {
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
-                                color: isSelected ? Colors.white70 : AppTheme.primaryGreen,
+                                color: isSelected
+                                    ? Colors.white70
+                                    : AppTheme.primaryGreen,
                               ),
                             ),
                           ],
                         ),
                       ),
                       if (isSelected)
-                        const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                        const Icon(Icons.check_circle_rounded,
+                            color: Colors.white, size: 20),
                     ],
                   ),
                 ),
@@ -1383,7 +1591,8 @@ class _PosVariantSelectionModalState extends State<_PosVariantSelectionModal> {
                       padding: const EdgeInsets.symmetric(horizontal: 14.0),
                       child: Text(
                         '$_counterQuantity',
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                     ),
                     IconButton(
@@ -1405,7 +1614,8 @@ class _PosVariantSelectionModalState extends State<_PosVariantSelectionModal> {
             decoration: BoxDecoration(
               color: AppTheme.primaryGreen.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.primaryGreen.withValues(alpha: 0.2)),
+              border: Border.all(
+                  color: AppTheme.primaryGreen.withValues(alpha: 0.2)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1415,21 +1625,28 @@ class _PosVariantSelectionModalState extends State<_PosVariantSelectionModal> {
                   children: [
                     Text(
                       '$_counterQuantity × ${_selectedVariant.sizeLabel}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 14),
                     ),
                     Text(
                       '৳${_selectedVariant.price.toStringAsFixed(0)} প্রতি এককে',
-                      style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                      style: const TextStyle(
+                          fontSize: 12, color: AppTheme.textMuted),
                     ),
                   ],
                 ),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    const Text('মোট দাম', style: TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+                    const Text('মোট দাম',
+                        style:
+                            TextStyle(fontSize: 11, color: AppTheme.textMuted)),
                     Text(
                       '৳ ${_calculatedTotalPrice.toStringAsFixed(0)}',
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.primaryGreen),
+                      style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.primaryGreen),
                     ),
                   ],
                 ),
@@ -1447,12 +1664,16 @@ class _PosVariantSelectionModalState extends State<_PosVariantSelectionModal> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.error_outline_rounded, color: AppTheme.errorRed, size: 18),
+                  const Icon(Icons.error_outline_rounded,
+                      color: AppTheme.errorRed, size: 18),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'পর্যাপ্ত স্টক নেই! (অবশিষ্ট স্টক: ${_selectedVariant.stock.toInt()}টি)',
-                      style: const TextStyle(color: AppTheme.errorRed, fontWeight: FontWeight.bold, fontSize: 12),
+                      style: const TextStyle(
+                          color: AppTheme.errorRed,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12),
                     ),
                   ),
                 ],
@@ -1470,9 +1691,11 @@ class _PosVariantSelectionModalState extends State<_PosVariantSelectionModal> {
                   onPressed: () => Navigator.pop(context),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
                   ),
-                  child: const Text('বাতিল', style: TextStyle(fontWeight: FontWeight.bold)),
+                  child: const Text('বাতিল',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ),
               const SizedBox(width: 12),
@@ -1493,10 +1716,14 @@ class _PosVariantSelectionModalState extends State<_PosVariantSelectionModal> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.primaryGreen,
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
                   ),
-                  icon: const Icon(Icons.add_shopping_cart_rounded, color: Colors.white, size: 18),
-                  label: const Text('কার্টে যোগ করুন', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  icon: const Icon(Icons.add_shopping_cart_rounded,
+                      color: Colors.white, size: 18),
+                  label: const Text('কার্টে যোগ করুন',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, color: Colors.white)),
                 ),
               ),
             ],

@@ -7,6 +7,8 @@ import '../theme/app_theme.dart';
 import '../screens/report_screen.dart';
 import '../screens/low_stock_screen.dart';
 import '../screens/dues_screen.dart';
+import '../screens/stock_in_screen.dart';
+import '../screens/staff_management_screen.dart';
 
 class AppDrawer extends StatefulWidget {
   final int currentTab;
@@ -216,7 +218,7 @@ class _AppDrawerState extends State<AppDrawer> {
                   title: 'ক্রয় / স্টক ইন',
                   subtitle: 'নতুন স্টক ও ক্রয় হিসেব',
                   isSelected: false,
-                  onTap: () => _showComingSoonToast('ক্রয় / স্টক ইন'),
+                  onTap: () => _navigateToScreen(const StockInScreen()),
                 ),
                 _buildDrawerCardItem(
                   icon: Icons.menu_book_outlined,
@@ -240,7 +242,7 @@ class _AppDrawerState extends State<AppDrawer> {
                   title: 'কর্মচারী ব্যবস্থাপনা',
                   subtitle: 'স্টাফ ও বেতন হিসাব',
                   isSelected: false,
-                  onTap: () => _showComingSoonToast('কর্মচারী ব্যবস্থাপনা'),
+                  onTap: () => _navigateToScreen(const StaffManagementScreen()),
                 ),
 
                 const SizedBox(height: 12),

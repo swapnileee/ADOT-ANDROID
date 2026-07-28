@@ -3,6 +3,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/product_model.dart';
 import '../models/sale_model.dart';
 import '../models/expense_model.dart';
+import '../models/purchase_model.dart';
+import '../models/staff_model.dart';
+import '../models/salary_payment_model.dart';
 
 class SupabaseService {
   SupabaseClient? get _client {
@@ -83,9 +86,33 @@ class SupabaseService {
     ),
   ];
 
+  static final List<StaffModel> _localSeedStaff = [
+    StaffModel(
+      id: 'st_1',
+      name: 'করিম হোসেন',
+      designation: 'ম্যানেজার ও সেলসম্যান',
+      phone: '01711223344',
+      joinDate: DateTime(2025, 1, 1),
+      monthlySalary: 18000.0,
+      status: 'active',
+    ),
+    StaffModel(
+      id: 'st_2',
+      name: 'রাফি ইসলাম',
+      designation: 'সহকারী বিক্রয়কর্মী',
+      phone: '01899887766',
+      joinDate: DateTime(2025, 6, 15),
+      monthlySalary: 12000.0,
+      status: 'active',
+    ),
+  ];
+
   static List<Product> _inMemoryProducts = List.from(_localSeedProducts);
   static final List<SaleModel> _inMemorySales = [];
   static final List<ExpenseModel> _inMemoryExpenses = [];
+  static final List<PurchaseModel> _inMemoryPurchases = [];
+  static List<StaffModel> _inMemoryStaff = List.from(_localSeedStaff);
+  static final List<SalaryPaymentModel> _inMemorySalaryPayments = [];
 
   // --- CUSTOMER SYNC ---
   Future<void> syncCustomer(String customerName, {String? customerPhone}) async {
@@ -191,6 +218,81 @@ class SupabaseService {
           debugPrint('Supabase deductVariantStock error: $e');
         }
       }
+    }
+  }
+
+  Future<void> addVariantStock({
+    required String productId,
+    required String variantId,
+    required double quantityToAdd,
+  }) async {
+    final index = _inMemoryProducts.indexWhere((p) => p.id == productId);
+    if (index >= 0) {
+      final p = _inMemoryProducts[index];
+      final vIndex = p.variants.indexWhere((v) => v.id == variantId);
+      if (vIndex >= 0) {
+        final currentV = p.variants[vIndex];
+        final newStock = currentV.stock + quantityToAdd;
+        final updatedVariants = List<ProductVariant>.from(p.variants);
+        updatedVariants[vIndex] = currentV.copyWith(stock: newStock);
+        final updatedProduct = p.copyWith(variants: updatedVariants);
+        _inMemoryProducts[index] = updatedProduct;
+
+        try {
+          final client = _client;
+          if (client != null) {
+            await client.from('products').update(updatedProduct.toJson()).eq('id', productId);
+          }
+        } catch (e) {
+          debugPrint('Supabase addVariantStock error: $e');
+        }
+      }
+    }
+  }
+
+  // --- PURCHASES / STOCK IN ---
+  Future<List<PurchaseModel>> fetchPurchases() async {
+    try {
+      final client = _client;
+      if (client != null) {
+        try {
+          final response = await client.from('purchases').select('*').order('created_at', ascending: false);
+          return (response as List).map((json) => PurchaseModel.fromJson(json)).toList();
+        } catch (_) {
+          final response = await client.from('stock_logs').select('*').order('created_at', ascending: false);
+          return (response as List).map((json) => PurchaseModel.fromJson(json)).toList();
+        }
+      }
+    } catch (e) {
+      debugPrint('Supabase fetchPurchases error: $e');
+    }
+    return _inMemoryPurchases;
+  }
+
+  Future<void> processStockIn({
+    required PurchaseModel purchase,
+  }) async {
+    _inMemoryPurchases.insert(0, purchase);
+
+    if (purchase.variantId != null && purchase.variantId!.isNotEmpty) {
+      await addVariantStock(
+        productId: purchase.productId,
+        variantId: purchase.variantId!,
+        quantityToAdd: purchase.quantityAdded,
+      );
+    }
+
+    try {
+      final client = _client;
+      if (client != null) {
+        try {
+          await client.from('purchases').insert(purchase.toJson());
+        } catch (_) {
+          await client.from('stock_logs').insert(purchase.toJson());
+        }
+      }
+    } catch (e) {
+      debugPrint('Supabase processStockIn error: $e');
     }
   }
 
@@ -385,6 +487,7 @@ class SupabaseService {
     final now = DateTime.now();
     double todaySalesTotal = 0.0;
     double todayCogsTotal = 0.0;
+    int todayOrderCount = 0;
 
     for (var sale in salesList) {
       if (sale.createdAt != null &&
@@ -393,6 +496,7 @@ class SupabaseService {
           sale.createdAt!.day == now.day) {
         todaySalesTotal += sale.totalPrice;
         todayCogsTotal += (sale.totalPrice * 0.70);
+        todayOrderCount++;
       }
     }
 
@@ -425,6 +529,90 @@ class SupabaseService {
       'totalDue': totalDue,
       'totalProducts': productsList.length,
       'lowStockCount': lowStockCount,
+      'todayOrderCount': todayOrderCount,
     };
+  }
+
+  // --- STAFF & SALARY MANAGEMENT ---
+  Future<List<StaffModel>> fetchStaff() async {
+    try {
+      final client = _client;
+      if (client != null) {
+        final response = await client.from('staff').select('*').order('name', ascending: true);
+        final list = (response as List).map((json) => StaffModel.fromJson(json)).toList();
+        if (list.isNotEmpty) {
+          _inMemoryStaff = list;
+          return list;
+        }
+      }
+    } catch (e) {
+      debugPrint('Supabase fetchStaff error: $e');
+    }
+    return _inMemoryStaff;
+  }
+
+  Future<void> addStaff(StaffModel staff) async {
+    _inMemoryStaff.insert(0, staff);
+    try {
+      final client = _client;
+      if (client != null) {
+        await client.from('staff').insert(staff.toJson());
+      }
+    } catch (e) {
+      debugPrint('Supabase addStaff error: $e');
+    }
+  }
+
+  Future<void> updateStaff(StaffModel staff) async {
+    final index = _inMemoryStaff.indexWhere((s) => s.id.toString() == staff.id.toString());
+    if (index >= 0) {
+      _inMemoryStaff[index] = staff;
+    }
+    try {
+      final client = _client;
+      if (client != null && staff.id != null) {
+        await client.from('staff').update(staff.toJson()).eq('id', staff.id);
+      }
+    } catch (e) {
+      debugPrint('Supabase updateStaff error: $e');
+    }
+  }
+
+  Future<List<SalaryPaymentModel>> fetchSalaryPayments() async {
+    try {
+      final client = _client;
+      if (client != null) {
+        final response = await client.from('salary_payments').select('*').order('created_at', ascending: false);
+        return (response as List).map((json) => SalaryPaymentModel.fromJson(json)).toList();
+      }
+    } catch (e) {
+      debugPrint('Supabase fetchSalaryPayments error: $e');
+    }
+    return _inMemorySalaryPayments;
+  }
+
+  Future<void> processSalaryPayment({
+    required SalaryPaymentModel payment,
+    bool addAsExpense = true,
+  }) async {
+    _inMemorySalaryPayments.insert(0, payment);
+
+    try {
+      final client = _client;
+      if (client != null) {
+        await client.from('salary_payments').insert(payment.toJson());
+      }
+    } catch (e) {
+      debugPrint('Supabase processSalaryPayment error: $e');
+    }
+
+    if (addAsExpense) {
+      await addExpense(ExpenseModel(
+        title: '[কর্মচারী বেতন] ${payment.staffName} - ${payment.monthYear}',
+        amount: payment.amountPaid,
+        note: payment.notes ?? 'কর্মচারী বেতন প্রদান',
+        createdAt: payment.paymentDate,
+      ));
+    }
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:intl/intl.dart';
 import '../services/supabase_service.dart';
 import '../services/pdf_report_service.dart';
 import '../models/sale_model.dart';
@@ -16,6 +17,8 @@ class ReportScreen extends StatefulWidget {
 
 class _ReportScreenState extends State<ReportScreen> {
   final SupabaseService _supabaseService = SupabaseService();
+  final GlobalKey _pdfReportKey = GlobalKey();
+
   bool _isLoading = true;
   bool _isExportingPdf = false;
 
@@ -26,6 +29,13 @@ class _ReportScreenState extends State<ReportScreen> {
   int _expensesCount = 0;
   List<SaleModel> _salesList = [];
   List<ExpenseModel> _expensesList = [];
+
+  // Dedicated PDF Export Render State
+  String _exportPeriodTitle = 'এই মাস';
+  double _exportSalesSum = 0.0;
+  double _exportExpensesSum = 0.0;
+  double _exportDueSum = 0.0;
+  List<SaleModel> _exportSalesList = [];
 
   @override
   void initState() {
@@ -60,6 +70,10 @@ class _ReportScreenState extends State<ReportScreen> {
         _totalDue = dueSum;
         _salesCount = sales.length;
         _expensesCount = expenses.length;
+        _exportSalesSum = salesSum;
+        _exportExpensesSum = expensesSum;
+        _exportDueSum = dueSum;
+        _exportSalesList = sales;
         _isLoading = false;
       });
     } catch (e) {
@@ -76,7 +90,7 @@ class _ReportScreenState extends State<ReportScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) {
+      builder: (modalContext) {
         return Padding(
           padding: const EdgeInsets.all(24.0),
           child: Column(
@@ -96,7 +110,7 @@ class _ReportScreenState extends State<ReportScreen> {
                   ),
                   IconButton(
                     icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () => Navigator.pop(modalContext),
                   ),
                 ],
               ),
@@ -112,9 +126,12 @@ class _ReportScreenState extends State<ReportScreen> {
                 ),
                 title: const Text('আজ (Today)', style: TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: const Text('আজকের দিনের বিক্রি ও খরচের হিসাব'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _processAndGenerateReport('আজ');
+                onTap: () async {
+                  if (Navigator.of(context, rootNavigator: true).canPop()) {
+                    Navigator.of(context, rootNavigator: true).pop();
+                  }
+                  await Future.delayed(const Duration(milliseconds: 300));
+                  await _processAndGenerateReport('আজ');
                 },
               ),
               const Divider(height: 1),
@@ -129,9 +146,12 @@ class _ReportScreenState extends State<ReportScreen> {
                 ),
                 title: const Text('এই সপ্তাহ (This Week)', style: TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: const Text('চলতি সপ্তাহের মোট হিসাব'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _processAndGenerateReport('এই সপ্তাহ');
+                onTap: () async {
+                  if (Navigator.of(context, rootNavigator: true).canPop()) {
+                    Navigator.of(context, rootNavigator: true).pop();
+                  }
+                  await Future.delayed(const Duration(milliseconds: 300));
+                  await _processAndGenerateReport('এই সপ্তাহ');
                 },
               ),
               const Divider(height: 1),
@@ -146,9 +166,12 @@ class _ReportScreenState extends State<ReportScreen> {
                 ),
                 title: const Text('এই মাস (This Month)', style: TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: const Text('চলতি মাসের সার্বিক হিসাব'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _processAndGenerateReport('এই মাস');
+                onTap: () async {
+                  if (Navigator.of(context, rootNavigator: true).canPop()) {
+                    Navigator.of(context, rootNavigator: true).pop();
+                  }
+                  await Future.delayed(const Duration(milliseconds: 300));
+                  await _processAndGenerateReport('এই মাস');
                 },
               ),
             ],
@@ -160,14 +183,42 @@ class _ReportScreenState extends State<ReportScreen> {
 
   Future<void> _processAndGenerateReport(String periodTitle) async {
     if (_isExportingPdf) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        backgroundColor: const Color(0xFF2E4F3E),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.only(bottom: 24, left: 16, right: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        duration: const Duration(minutes: 2),
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                'PDF রিপোর্ট তৈরি হচ্ছে ($periodTitle), অনুগ্রহ করে অপেক্ষা করুন...',
+                style: const TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
     setState(() => _isExportingPdf = true);
 
-    try {
-      CustomSnackBar.showSuccess(
-        context,
-        'PDF রিপোর্ট তৈরি হচ্ছে ($periodTitle), অনুগ্রহ করে অপেক্ষা করুন...',
-      );
+    // Allow UI frame pass so toast renders instantly on screen
+    await WidgetsBinding.instance.endOfFrame;
 
+    try {
       final now = DateTime.now();
       List<SaleModel> filteredSales = [];
       double filteredSalesSum = 0.0;
@@ -221,18 +272,33 @@ class _ReportScreenState extends State<ReportScreen> {
         filteredDueSum += s.dueAmount;
       }
 
-      await PdfReportService.generateAndPreviewReport(
-        totalSales: filteredSalesSum,
-        totalExpenses: filteredExpensesSum,
-        totalDue: filteredDueSum,
-        salesList: filteredSales,
-        periodTitle: periodTitle,
-      );
+      // Update Mounted Export Widget Render Data
+      setState(() {
+        _exportPeriodTitle = periodTitle;
+        _exportSalesSum = filteredSalesSum;
+        _exportExpensesSum = filteredExpensesSum;
+        _exportDueSum = filteredDueSum;
+        _exportSalesList = filteredSales;
+      });
+
+      // Wait for frame paint completion pass
+      await WidgetsBinding.instance.endOfFrame;
+
+      // Safely capture boundary from real mounted render tree
+      final imageBytes = await PdfReportService.captureReportSafely(_pdfReportKey);
+
+      if (imageBytes != null) {
+        await PdfReportService.exportReportAsPdf(imageBytes);
+      } else {
+        if (!mounted) return;
+        CustomSnackBar.showError(context, 'PDF ইমেজ ক্যাপচার করতে ব্যর্থ হয়েছে।');
+      }
     } catch (e) {
       if (!mounted) return;
       CustomSnackBar.showError(context, 'PDF তৈরি করতে ব্যর্থ হয়েছে: $e');
     } finally {
       if (mounted) {
+        messenger.clearSnackBars();
         setState(() => _isExportingPdf = false);
       }
     }
@@ -255,129 +321,165 @@ class _ReportScreenState extends State<ReportScreen> {
         ],
       ),
       body: SafeArea(
-        child: _isLoading
-            ? const Center(
-                child: SpinKitFadingCube(
-                  color: AppTheme.primaryGreen,
-                  size: 40.0,
-                ),
-              )
-            : RefreshIndicator(
-                onRefresh: _loadReportData,
-                color: AppTheme.primaryGreen,
-                child: ListView(
-                  padding: const EdgeInsets.all(16.0),
-                  children: [
-                    // PDF Export Launcher Card
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryGreen,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.picture_as_pdf_rounded, color: Colors.white, size: 28),
-                          ),
-                          const SizedBox(width: 14),
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'সামগ্রিক হিসাব ও খাতা রিপোর্ট',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                SizedBox(height: 2),
-                                Text(
-                                  'সময়কাল ভিত্তিক আয়-ব্যয় ও লাভ-ক্ষতির স্টেটমেন্ট',
-                                  style: TextStyle(color: Colors.white70, fontSize: 12),
-                                ),
-                              ],
-                            ),
-                          ),
-                          ElevatedButton.icon(
-                            onPressed: _isExportingPdf ? null : _showDateRangeFilterDialog,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.accentGold,
-                              foregroundColor: AppTheme.darkGreen,
-                            ),
-                            icon: const Icon(Icons.download_rounded, size: 18),
-                            label: const Text('PDF এক্সপোর্ট'),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Financial Overview Cards
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildReportCard(
-                            title: 'সর্বমোট বিক্রি',
-                            value: '৳ ${_totalSales.toStringAsFixed(0)}',
-                            subtitle: 'মোট $_salesCountটি অর্ডার',
-                            icon: Icons.trending_up_rounded,
-                            color: AppTheme.primaryGreen,
-                            bgColor: const Color(0xFFE6F4EA),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildReportCard(
-                            title: 'সর্বমোট খরচ',
-                            value: '৳ ${_totalExpenses.toStringAsFixed(0)}',
-                            subtitle: 'মোট $_expensesCountটি বায়',
-                            icon: Icons.trending_down_rounded,
-                            color: AppTheme.errorRed,
-                            bgColor: const Color(0xFFFCE8E6),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildReportCard(
-                            title: 'নিট লাভ / ব্যালেন্স',
-                            value: '৳ ${_netProfit.toStringAsFixed(0)}',
-                            subtitle: _netProfit >= 0 ? 'পজিটিভ ক্যাশফ্লো' : 'নেগেটিভ ক্যাশফ্লো',
-                            icon: Icons.account_balance_rounded,
-                            color: _netProfit >= 0 ? AppTheme.primaryGreen : AppTheme.errorRed,
-                            bgColor: _netProfit >= 0 ? const Color(0xFFE6F4EA) : const Color(0xFFFCE8E6),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildReportCard(
-                            title: 'মোট বকেয়া/বাকি',
-                            value: '৳ ${_totalDue.toStringAsFixed(0)}',
-                            subtitle: 'প্রাপ্তব্য পাওনা',
-                            icon: Icons.pending_actions_rounded,
-                            color: AppTheme.warningOrange,
-                            bgColor: const Color(0xFFFEF7E0),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+        child: Stack(
+          children: [
+            // Mounted Offscreen Printable Widget in Active Render Tree
+            Positioned(
+              left: -9999,
+              top: -9999,
+              child: RepaintBoundary(
+                key: _pdfReportKey,
+                child: PdfReportViewWidget(
+                  title: 'ADOT Organic Store',
+                  dateRange: _exportPeriodTitle,
+                  currentDate: DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now()),
+                  totalSales: _exportSalesSum,
+                  totalExpenses: _exportExpensesSum,
+                  netProfit: _exportSalesSum - _exportExpensesSum,
+                  totalDue: _exportDueSum,
+                  salesList: _exportSalesList.take(25).map((sale) => {
+                    'product_name': sale.productName,
+                    'quantity': sale.displayQuantityWithUnit,
+                    'customer_name': sale.customerName.isEmpty ? 'নগদ' : sale.customerName,
+                    'total_price': sale.totalPrice.toStringAsFixed(0),
+                    'due_amount': sale.dueAmount.toStringAsFixed(0),
+                  }).toList(),
                 ),
               ),
+            ),
+
+            // Main UI
+            _isLoading
+                ? const Center(
+                    child: SpinKitFadingCube(
+                      color: AppTheme.primaryGreen,
+                      size: 40.0,
+                    ),
+                  )
+                : RefreshIndicator(
+                    onRefresh: _loadReportData,
+                    color: AppTheme.primaryGreen,
+                    child: ListView(
+                      padding: const EdgeInsets.all(16.0),
+                      children: [
+                        // PDF Export Launcher Card
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryGreen,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.picture_as_pdf_rounded, color: Colors.white, size: 28),
+                              ),
+                              const SizedBox(width: 14),
+                              const Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'সামগ্রিক হিসাব ও খাতা রিপোর্ট',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    SizedBox(height: 2),
+                                    Text(
+                                      'সময়কাল ভিত্তিক আয়-ব্যয় ও লাভ-ক্ষতির স্টেটমেন্ট',
+                                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              ElevatedButton.icon(
+                                onPressed: _isExportingPdf ? null : _showDateRangeFilterDialog,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.accentGold,
+                                  foregroundColor: AppTheme.darkGreen,
+                                ),
+                                icon: _isExportingPdf
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.darkGreen),
+                                      )
+                                    : const Icon(Icons.download_rounded, size: 18),
+                                label: const Text('PDF এক্সপোর্ট'),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // Financial Overview Cards
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildReportCard(
+                                title: 'সর্বমোট বিক্রি',
+                                value: '৳ ${_totalSales.toStringAsFixed(0)}',
+                                subtitle: 'মোট $_salesCountটি অর্ডার',
+                                icon: Icons.trending_up_rounded,
+                                color: AppTheme.primaryGreen,
+                                bgColor: const Color(0xFFE6F4EA),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildReportCard(
+                                title: 'সর্বমোট খরচ',
+                                value: '৳ ${_totalExpenses.toStringAsFixed(0)}',
+                                subtitle: 'মোট $_expensesCountটি বায়',
+                                icon: Icons.trending_down_rounded,
+                                color: AppTheme.errorRed,
+                                bgColor: const Color(0xFFFCE8E6),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildReportCard(
+                                title: 'নিট লাভ / ব্যালেন্স',
+                                value: '৳ ${_netProfit.toStringAsFixed(0)}',
+                                subtitle: _netProfit >= 0 ? 'পজিটিভ ক্যাশফ্লো' : 'নেগেটিভ ক্যাশফ্লো',
+                                icon: Icons.account_balance_rounded,
+                                color: _netProfit >= 0 ? AppTheme.primaryGreen : AppTheme.errorRed,
+                                bgColor: _netProfit >= 0 ? const Color(0xFFE6F4EA) : const Color(0xFFFCE8E6),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildReportCard(
+                                title: 'মোট বকেয়া/বাকি',
+                                value: '৳ ${_totalDue.toStringAsFixed(0)}',
+                                subtitle: 'প্রাপ্তব্য পাওনা',
+                                icon: Icons.pending_actions_rounded,
+                                color: AppTheme.warningOrange,
+                                bgColor: const Color(0xFFFEF7E0),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+          ],
+        ),
       ),
     );
   }
