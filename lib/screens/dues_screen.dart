@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:telephony/telephony.dart';
+import 'package:permission_handler/permission_handler.dart';
+import '../services/shop_info_service.dart';
 import '../services/supabase_service.dart';
 import '../models/sale_model.dart';
 import '../widgets/custom_snackbar.dart';
@@ -50,6 +53,42 @@ class _DuesScreenState extends State<DuesScreen> {
       if (!mounted) return;
       setState(() => _isLoading = false);
       CustomSnackBar.showError(context, 'বকেয়া ডাটা লোড করতে ব্যর্থ: $e');
+    }
+  }
+
+  Future<void> _sendDirectSms(SaleModel sale) async {
+    final phone = sale.customerPhone?.trim() ?? '';
+    if (phone.isEmpty) {
+      CustomSnackBar.showError(context, 'গ্রাহকের ফোন নম্বর দেওয়া নেই!');
+      return;
+    }
+
+    final name = sale.customerName.isEmpty ? 'সম্মানিত গ্রাহক' : sale.customerName;
+    final due = sale.dueAmount.toStringAsFixed(0);
+    final shopName = ShopInfoService.shopInfoNotifier.value.name;
+
+    final message = 'প্রিয় $name, $shopName-এ আপনার বকেয়া পাওনা ৳ $due টাকা। অনুগ্রহ করে বকেয়া পরিশোধ করার জন্য অনুরোধ করা হচ্ছে। ধন্যবাদ!';
+
+    try {
+      final status = await Permission.sms.request();
+      if (status.isGranted) {
+        final Telephony telephony = Telephony.instance;
+        await telephony.sendSms(
+          to: phone,
+          message: message,
+        );
+        if (mounted) {
+          CustomSnackBar.showSuccess(context, 'এসএমএস সফলভাবে পাঠানো হয়েছে!');
+        }
+      } else {
+        if (mounted) {
+          CustomSnackBar.showError(context, 'এসএমএস পাঠানোর অনুমতি দিন');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        CustomSnackBar.showError(context, 'এসএমএস পাঠাতে সমস্যা হয়েছে: $e');
+      }
     }
   }
 
@@ -478,21 +517,48 @@ class _DuesScreenState extends State<DuesScreen> {
 
                                       const SizedBox(height: 12),
 
-                                      SizedBox(
-                                        width: double.infinity,
-                                        child: ElevatedButton.icon(
-                                          onPressed: () => _showCollectOrEditDueDialog(sale),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: AppTheme.primaryGreen,
-                                            padding: const EdgeInsets.symmetric(vertical: 10),
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            flex: 2,
+                                            child: SizedBox(
+                                              height: 42,
+                                              child: ElevatedButton.icon(
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: const Color(0xFFD97706),
+                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                                ),
+                                                onPressed: () => _sendDirectSms(sale),
+                                                icon: const Icon(Icons.send_rounded, size: 16, color: Colors.white),
+                                                label: const Text(
+                                                  'SMS পাঠান',
+                                                  style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                                ),
+                                              ),
+                                            ),
                                           ),
-                                          icon: const Icon(Icons.edit_note_rounded, size: 18, color: Colors.white),
-                                          label: const Text(
-                                            'আদায় / এডিট করুন (Collect/Edit Due)',
-                                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            flex: 3,
+                                            child: SizedBox(
+                                              height: 42,
+                                              child: ElevatedButton.icon(
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: const Color(0xFF1B4332),
+                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                                ),
+                                                onPressed: () => _showCollectOrEditDueDialog(sale),
+                                                icon: const Icon(Icons.edit_note_rounded, size: 18, color: Colors.white),
+                                                label: const Text(
+                                                  'আদায় / এডিট',
+                                                  style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                                ),
+                                              ),
+                                            ),
                                           ),
-                                        ),
+                                        ],
                                       ),
                                     ],
                                   ),

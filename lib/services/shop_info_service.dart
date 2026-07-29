@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -45,12 +46,67 @@ class ShopInfoService {
     ),
   );
 
+  static StreamSubscription? _realtimeSubscription;
+
   static SupabaseClient? get _supabase {
     try {
       return Supabase.instance.client;
     } catch (_) {
       return null;
     }
+  }
+
+  /// Listen to live updates from Supabase `store_settings` table in real-time across devices
+  static void listenToRealtimeShopSettings() {
+    final client = _supabase;
+    if (client == null) return;
+
+    _realtimeSubscription?.cancel();
+    try {
+      _realtimeSubscription = client
+          .from('store_settings')
+          .stream(primaryKey: ['id'])
+          .listen((data) async {
+            if (data.isNotEmpty) {
+              final payload = data.first;
+              final remoteName = payload['shop_name']?.toString() ?? defaultName;
+              final remotePhone = payload['phone']?.toString() ?? defaultPhone;
+              final remoteAddress = payload['address']?.toString() ?? defaultAddress;
+              final remoteFooter = payload['invoice_footer']?.toString() ?? defaultInvoiceFooter;
+              final remoteLogo = payload['logo_url']?.toString() ?? payload['logo_path']?.toString() ?? '';
+
+              final remoteShopInfo = ShopInfo(
+                name: remoteName,
+                phone: remotePhone,
+                address: remoteAddress,
+                invoiceFooter: remoteFooter,
+                logoPath: remoteLogo,
+              );
+
+              // Update local SharedPreferences
+              try {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setString(_keyShopName, remoteName);
+                await prefs.setString(_keyShopPhone, remotePhone);
+                await prefs.setString(_keyShopAddress, remoteAddress);
+                await prefs.setString(_keyInvoiceFooter, remoteFooter);
+                await prefs.setString(_keyShopLogo, remoteLogo);
+              } catch (_) {}
+
+              // Update reactive ValueNotifier
+              shopInfoNotifier.value = remoteShopInfo;
+            }
+          }, onError: (e) {
+            debugPrint('Realtime store_settings stream error: $e');
+          });
+    } catch (e) {
+      debugPrint('Realtime store_settings subscription error: $e');
+    }
+  }
+
+  static void disposeRealtimeListener() {
+    _realtimeSubscription?.cancel();
+    _realtimeSubscription = null;
   }
 
   /// Cross-platform helper to get ImageProvider for logo (Base64, Network, or File)
@@ -190,6 +246,9 @@ class ShopInfoService {
       } catch (e) {
         debugPrint('Supabase store_settings fetch info: $e');
       }
+
+      // 3. Start realtime stream listener for instant multi-device sync
+      listenToRealtimeShopSettings();
     }
   }
 
