@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
-import 'package:telephony/telephony.dart';
+import 'package:background_sms/background_sms.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../services/shop_info_service.dart';
 import '../services/supabase_service.dart';
@@ -72,13 +72,18 @@ class _DuesScreenState extends State<DuesScreen> {
     try {
       final status = await Permission.sms.request();
       if (status.isGranted) {
-        final Telephony telephony = Telephony.instance;
-        await telephony.sendSms(
-          to: phone,
+        final SmsStatus result = await BackgroundSms.sendMessage(
+          phoneNumber: phone,
           message: message,
         );
-        if (mounted) {
-          CustomSnackBar.showSuccess(context, 'এসএমএস সফলভাবে পাঠানো হয়েছে!');
+        if (result == SmsStatus.sent) {
+          if (mounted) {
+            CustomSnackBar.showSuccess(context, 'এসএমএস সফলভাবে পাঠানো হয়েছে!');
+          }
+        } else {
+          if (mounted) {
+            CustomSnackBar.showError(context, 'এসএমএস পাঠাতে ব্যর্থ হয়েছে!');
+          }
         }
       } else {
         if (mounted) {
@@ -520,12 +525,13 @@ class _DuesScreenState extends State<DuesScreen> {
                                       Row(
                                         children: [
                                           Expanded(
-                                            flex: 2,
+                                            flex: 1,
                                             child: SizedBox(
                                               height: 42,
                                               child: ElevatedButton.icon(
                                                 style: ElevatedButton.styleFrom(
                                                   backgroundColor: const Color(0xFFD97706),
+                                                  elevation: 0,
                                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                                   padding: const EdgeInsets.symmetric(horizontal: 8),
                                                 ),
@@ -540,12 +546,13 @@ class _DuesScreenState extends State<DuesScreen> {
                                           ),
                                           const SizedBox(width: 8),
                                           Expanded(
-                                            flex: 3,
+                                            flex: 1,
                                             child: SizedBox(
                                               height: 42,
                                               child: ElevatedButton.icon(
                                                 style: ElevatedButton.styleFrom(
                                                   backgroundColor: const Color(0xFF1B4332),
+                                                  elevation: 0,
                                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                                   padding: const EdgeInsets.symmetric(horizontal: 8),
                                                 ),
