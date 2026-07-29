@@ -46,7 +46,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  void _showEditStoreProfileModal() {
+  Future<bool?> _showEditStoreProfileModal() async {
     final currentInfo = ShopInfoService.shopInfoNotifier.value;
     final nameController = TextEditingController(text: currentInfo.name);
     final phoneController = TextEditingController(text: currentInfo.phone);
@@ -55,7 +55,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     String selectedLogoPath = currentInfo.logoPath;
     final formKey = GlobalKey<FormState>();
 
-    showModalBottomSheet(
+    return showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppTheme.creamBg,
@@ -244,11 +244,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     logoPath: selectedLogoPath,
                                   );
 
-                                  // 3. Remove loading dialog
+                                  // 3. Immediately re-fetch and update local cache/notifiers
+                                  await ShopInfoService.loadShopInfo();
+
+                                  // 4. Remove loading dialog
                                   nav.pop();
 
-                                  // 4. Force close the BottomSheet modal
-                                  nav.pop();
+                                  // 5. Force close the BottomSheet modal with result true
+                                  nav.pop(true);
 
                                   // 5. Show success snackbar
                                   messenger.showSnackBar(
@@ -394,7 +397,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title: Text(shopInfo.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                   subtitle: Text('ফোন: ${shopInfo.phone} • ${shopInfo.address}', style: const TextStyle(fontSize: 12, color: AppTheme.textMuted)),
                   trailing: const Icon(Icons.edit_note_rounded, color: AppTheme.primaryGreen),
-                  onTap: _showEditStoreProfileModal,
+                  onTap: () async {
+                    final result = await _showEditStoreProfileModal();
+                    if (result == true) {
+                      await ShopInfoService.loadShopInfo();
+                      if (mounted) setState(() {});
+                    }
+                  },
                 );
               },
             ),

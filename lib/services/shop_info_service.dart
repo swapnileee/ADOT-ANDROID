@@ -219,11 +219,17 @@ class ShopInfoService {
         response ??= await client.from('store_settings').select().limit(1).maybeSingle();
 
         if (response != null && response is Map<String, dynamic>) {
-          final remoteName = response['shop_name']?.toString() ?? name;
-          final remotePhone = response['phone']?.toString() ?? phone;
-          final remoteAddress = response['address']?.toString() ?? address;
-          final remoteFooter = response['invoice_footer']?.toString() ?? invoiceFooter;
-          final remoteLogo = response['logo_url']?.toString() ?? response['logo_path']?.toString() ?? logoPath;
+          final remoteNameRaw = response['shop_name']?.toString() ?? response['name']?.toString();
+          final remotePhoneRaw = response['phone']?.toString();
+          final remoteAddressRaw = response['address']?.toString();
+          final remoteFooterRaw = response['invoice_footer']?.toString();
+          final remoteLogoRaw = response['logo_url']?.toString() ?? response['logo_path']?.toString();
+
+          final remoteName = (remoteNameRaw != null && remoteNameRaw.trim().isNotEmpty) ? remoteNameRaw.trim() : name;
+          final remotePhone = (remotePhoneRaw != null && remotePhoneRaw.trim().isNotEmpty) ? remotePhoneRaw.trim() : phone;
+          final remoteAddress = (remoteAddressRaw != null && remoteAddressRaw.trim().isNotEmpty) ? remoteAddressRaw.trim() : address;
+          final remoteFooter = (remoteFooterRaw != null && remoteFooterRaw.trim().isNotEmpty) ? remoteFooterRaw.trim() : invoiceFooter;
+          final remoteLogo = (remoteLogoRaw != null && remoteLogoRaw.trim().isNotEmpty) ? remoteLogoRaw.trim() : logoPath;
 
           final remoteShopInfo = ShopInfo(
             name: remoteName,
@@ -303,10 +309,19 @@ class ShopInfoService {
 
         final response = await client
             .from('store_settings')
-            .upsert(storeData)
+            .upsert(storeData, onConflict: user != null ? 'user_id' : null)
             .select();
 
         debugPrint('Supabase Store Settings Saved Successfully: $response');
+
+        // Re-assign ValueNotifier to guarantee broadcast to all UI listeners
+        shopInfoNotifier.value = ShopInfo(
+          name: updated.name,
+          phone: updated.phone,
+          address: updated.address,
+          invoiceFooter: updated.invoiceFooter,
+          logoPath: updated.logoPath,
+        );
       } catch (e) {
         debugPrint('Error saving to Supabase store_settings: $e');
         rethrow;

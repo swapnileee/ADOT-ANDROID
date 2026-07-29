@@ -12,6 +12,7 @@ import 'add_product_screen.dart';
 import 'low_stock_screen.dart';
 import 'dues_screen.dart';
 import 'stock_in_screen.dart';
+import 'staff_management_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final VoidCallback onNavigateToPOS;
@@ -73,7 +74,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double get _displayedSalesAmount {
     final now = DateTime.now();
     DateTime startCurrent;
-    DateTime endCurrent = now;
+    DateTime endCurrent = DateTime(now.year, now.month, now.day, 23, 59, 59);
 
     switch (_selectedSalesFilter) {
       case 'এই সপ্তাহ':
@@ -93,12 +94,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     double total = 0.0;
     for (var sale in _allSales) {
-      if (sale.createdAt != null &&
-          sale.createdAt!.isAfter(startCurrent.subtract(const Duration(milliseconds: 1))) &&
-          sale.createdAt!.isBefore(endCurrent.add(const Duration(milliseconds: 1)))) {
-        total += sale.totalPrice;
+      if (sale.createdAt != null) {
+        final saleDate = sale.createdAt!.toLocal();
+        if (saleDate.isAfter(startCurrent.subtract(const Duration(milliseconds: 1))) &&
+            saleDate.isBefore(endCurrent.add(const Duration(milliseconds: 1)))) {
+          total += sale.totalPrice;
+        }
       }
     }
+
+    if (total == 0.0 && _selectedSalesFilter == 'আজ' && _todaySales > 0) {
+      return _todaySales;
+    }
+
     return total;
   }
 
@@ -135,10 +143,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     double total = 0.0;
     for (var sale in _allSales) {
-      if (sale.createdAt != null &&
-          sale.createdAt!.isAfter(startPrev.subtract(const Duration(milliseconds: 1))) &&
-          sale.createdAt!.isBefore(endPrev.add(const Duration(milliseconds: 1)))) {
-        total += sale.totalPrice;
+      if (sale.createdAt != null) {
+        final saleDate = sale.createdAt!.toLocal();
+        if (saleDate.isAfter(startPrev.subtract(const Duration(milliseconds: 1))) &&
+            saleDate.isBefore(endPrev.add(const Duration(milliseconds: 1)))) {
+          total += sale.totalPrice;
+        }
       }
     }
     return total;
@@ -198,15 +208,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (p.totalStock <= 0) outCount++;
       }
 
+      double computedTodaySales = 0.0;
+      int computedTodayOrders = 0;
+      final now = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day);
+      final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
+      for (var sale in sales) {
+        if (sale.createdAt != null) {
+          final saleDate = sale.createdAt!.toLocal();
+          if (saleDate.isAfter(todayStart.subtract(const Duration(milliseconds: 1))) &&
+              saleDate.isBefore(todayEnd.add(const Duration(milliseconds: 1)))) {
+            computedTodaySales += sale.totalPrice;
+            computedTodayOrders++;
+          }
+        }
+      }
+
+      final statSales = (stats['todaySales'] as num?)?.toDouble() ?? 0.0;
+      final finalTodaySales = computedTodaySales > 0 ? computedTodaySales : statSales;
+      final statOrders = (stats['todayOrderCount'] as int?) ?? 0;
+      final finalTodayOrders = computedTodayOrders > 0 ? computedTodayOrders : statOrders;
+
       if (!mounted) return;
       setState(() {
-        _todaySales = stats['todaySales'] ?? 0.0;
-        _todayExpenses = stats['todayExpenses'] ?? 0.0;
+        _todaySales = finalTodaySales;
+        _todayExpenses = (stats['todayExpenses'] as num?)?.toDouble() ?? 0.0;
         _todayNetProfit = (stats['todayNetProfit'] as num?)?.toDouble() ?? (_todaySales - _todayExpenses - (_todaySales * 0.70));
-        _totalDue = stats['totalDue'] ?? 0.0;
-        _totalProducts = stats['totalProducts'] ?? 0;
-        _lowStockCount = stats['lowStockCount'] ?? 0;
-        _todayOrderCount = (stats['todayOrderCount'] as int?) ?? 0;
+        _totalDue = (stats['totalDue'] as num?)?.toDouble() ?? 0.0;
+        _totalProducts = (stats['totalProducts'] as int?) ?? 0;
+        _lowStockCount = (stats['lowStockCount'] as int?) ?? 0;
+        _todayOrderCount = finalTodayOrders;
         _outOfStockCount = outCount;
         _allSales = sales;
         _recentSales = sales.take(5).toList();
@@ -448,6 +480,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.start,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           // 2. TODAY SUMMARY STRIP
@@ -456,7 +489,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                           // 3. MAIN CARDS: TODAY'S SALES
                           _buildMainMetricsCards(),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 8.0),
 
                           // 4. 2x2 GRID (PROFIT, EXPENSE, CASH, DUE)
                           _buildSecondaryMetricsGrid(),
@@ -651,7 +684,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: DashboardScreen.cardGreen,
         borderRadius: BorderRadius.circular(22),
@@ -726,9 +759,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       crossAxisCount: 2,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 12,
-      mainAxisSpacing: 12,
-      childAspectRatio: 1.55,
+      crossAxisSpacing: 10,
+      mainAxisSpacing: 10,
+      childAspectRatio: 1.5,
       children: [
         _buildSecondaryCard('নিট লাভ', '৳ ${_todayNetProfit.toStringAsFixed(0)}', '+১২% গতকালের তুলনায়', Icons.trending_up, const Color(0xFF2E7D32)),
         _buildSecondaryCard('মোট খরচ', '৳ ${_todayExpenses.toStringAsFixed(0)}', '-৮% গতকালের তুলনায়', Icons.trending_down, const Color(0xFFD32F2F)),
@@ -740,7 +773,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildSecondaryCard(String title, String amount, String sub, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
@@ -748,7 +781,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Row(
             children: [
@@ -853,7 +886,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
             '১ জনের বেতন বকেয়া আছে',
             'বেতন দিন',
             Colors.orange,
-            () => CustomSnackBar.showInfo(context, 'কর্মচারী বেতন মডিউল শীঘ্রই আসছে!'),
+            () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const StaffManagementScreen(),
+                ),
+              ).then((_) => _loadDashboardData());
+            },
           ),
           const Divider(height: 16),
           _buildAlertItem(

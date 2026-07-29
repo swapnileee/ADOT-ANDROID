@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
-import 'package:background_sms/background_sms.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/shop_info_service.dart';
 import '../services/supabase_service.dart';
 import '../models/sale_model.dart';
@@ -57,42 +56,36 @@ class _DuesScreenState extends State<DuesScreen> {
   }
 
   Future<void> _sendDirectSms(SaleModel sale) async {
-    final phone = sale.customerPhone?.trim() ?? '';
+    final String phone = sale.customerPhone?.trim() ?? '';
     if (phone.isEmpty) {
-      CustomSnackBar.showError(context, 'গ্রাহকের ফোন নম্বর দেওয়া নেই!');
+      if (mounted) {
+        CustomSnackBar.showError(context, 'গ্রাহকের মোবাইল নম্বর পাওয়া যায়নি!');
+      }
       return;
     }
 
-    final name = sale.customerName.isEmpty ? 'সম্মানিত গ্রাহক' : sale.customerName;
-    final due = sale.dueAmount.toStringAsFixed(0);
-    final shopName = ShopInfoService.shopInfoNotifier.value.name;
+    final String name = sale.customerName.isEmpty ? 'সম্মানিত গ্রাহক' : sale.customerName;
+    final String due = sale.dueAmount.toStringAsFixed(0);
+    final String shopName = ShopInfoService.shopInfoNotifier.value.name;
 
-    final message = 'প্রিয় $name, $shopName-এ আপনার বকেয়া পাওনা ৳ $due টাকা। অনুগ্রহ করে বকেয়া পরিশোধ করার জন্য অনুরোধ করা হচ্ছে। ধন্যবাদ!';
+    final String message = 'প্রিয় $name, $shopName-এ আপনার বকেয়া পাওনা ৳ $due টাকা। অনুগ্রহ করে বকেয়া পরিশোধ করার জন্য অনুরোধ করা হচ্ছে। ধন্যবাদ!';
+    final Uri smsUri = Uri(
+      scheme: 'sms',
+      path: phone,
+      queryParameters: <String, String>{
+        'body': message,
+      },
+    );
 
     try {
-      final status = await Permission.sms.request();
-      if (status.isGranted) {
-        final SmsStatus result = await BackgroundSms.sendMessage(
-          phoneNumber: phone,
-          message: message,
-        );
-        if (result == SmsStatus.sent) {
-          if (mounted) {
-            CustomSnackBar.showSuccess(context, 'এসএমএস সফলভাবে পাঠানো হয়েছে!');
-          }
-        } else {
-          if (mounted) {
-            CustomSnackBar.showError(context, 'এসএমএস পাঠাতে ব্যর্থ হয়েছে!');
-          }
-        }
+      if (await canLaunchUrl(smsUri)) {
+        await launchUrl(smsUri);
       } else {
-        if (mounted) {
-          CustomSnackBar.showError(context, 'এসএমএস পাঠানোর অনুমতি দিন');
-        }
+        await launchUrl(smsUri, mode: LaunchMode.externalApplication);
       }
     } catch (e) {
       if (mounted) {
-        CustomSnackBar.showError(context, 'এসএমএস পাঠাতে সমস্যা হয়েছে: $e');
+        CustomSnackBar.showError(context, 'মেসেজ অ্যাপ খুলতে সমস্যা হয়েছে: $e');
       }
     }
   }

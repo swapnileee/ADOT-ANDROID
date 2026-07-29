@@ -18,7 +18,7 @@ dependencies:
   shared_preferences: ^2.2.2
   image_picker: ^1.2.3
   image_cropper: ^12.2.1
-  background_sms: ^0.0.4
+  url_launcher: ^6.3.0
   permission_handler: ^11.3.1
 
 dev_dependencies:

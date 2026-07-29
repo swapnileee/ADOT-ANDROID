@@ -546,8 +546,14 @@ class _StockInScreenState extends State<StockInScreen> {
 
   // TAB 1: NEW STOCK IN FORM (DUAL MODE)
   Widget _buildNewStockInTab() {
+    final bottomInset = MediaQuery.of(context).padding.bottom;
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
+      padding: EdgeInsets.only(
+        left: 16.0,
+        right: 16.0,
+        top: 16.0,
+        bottom: bottomInset + 100.0,
+      ),
       child: Form(
         key: _formKey,
         child: Column(
@@ -1011,32 +1017,41 @@ class _StockInScreenState extends State<StockInScreen> {
             const SizedBox(height: 24),
 
             // SUBMIT BUTTON
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton.icon(
-                onPressed: _isSubmitting ? null : _submitStockIn,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryGreen,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                  elevation: 2,
+            SafeArea(
+              top: false,
+              bottom: true,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  bottom: bottomInset > 0 ? 0.0 : 12.0,
                 ),
-                icon: _isSubmitting
-                    ? const SizedBox.shrink()
-                    : const Icon(Icons.check_circle_rounded,
-                        color: Colors.white),
-                label: _isSubmitting
-                    ? const SpinKitThreeBounce(color: Colors.white, size: 22)
-                    : Text(
-                        _isNewProductMode
-                            ? 'নতুন পণ্য স্টকে যুক্ত করুন'
-                            : 'স্টক ইন সম্পন্ন করুন',
-                        style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton.icon(
+                    onPressed: _isSubmitting ? null : _submitStockIn,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryGreen,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                      elevation: 2,
+                    ),
+                    icon: _isSubmitting
+                        ? const SizedBox.shrink()
+                        : const Icon(Icons.check_circle_rounded,
                             color: Colors.white),
-                      ),
+                    label: _isSubmitting
+                        ? const SpinKitThreeBounce(color: Colors.white, size: 22)
+                        : Text(
+                            _isNewProductMode
+                                ? 'নতুন পণ্য স্টকে যুক্ত করুন'
+                                : 'স্টক ইন সম্পন্ন করুন',
+                            style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white),
+                          ),
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: 24),
@@ -1095,7 +1110,12 @@ class _StockInScreenState extends State<StockInScreen> {
                   ),
                 )
               : ListView.separated(
-                  padding: const EdgeInsets.all(16),
+                  padding: EdgeInsets.only(
+                    left: 16,
+                    right: 16,
+                    top: 16,
+                    bottom: MediaQuery.of(context).padding.bottom + 24,
+                  ),
                   itemCount: filtered.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {

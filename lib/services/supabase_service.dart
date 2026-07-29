@@ -457,7 +457,20 @@ class SupabaseService {
     try {
       final client = _client;
       if (client != null) {
-        final response = await client.from('expenses').select('*').order('created_at', ascending: false);
+        final userId = client.auth.currentUser?.id;
+        dynamic response;
+        if (userId != null) {
+          response = await client
+              .from('expenses')
+              .select('*')
+              .eq('user_id', userId)
+              .order('created_at', ascending: false);
+        } else {
+          response = await client
+              .from('expenses')
+              .select('*')
+              .order('created_at', ascending: false);
+        }
         return (response as List).map((json) => ExpenseModel.fromJson(json)).toList();
       }
     } catch (e) {
@@ -468,13 +481,52 @@ class SupabaseService {
 
   Future<void> addExpense(ExpenseModel expense) async {
     _inMemoryExpenses.insert(0, expense);
+    final client = _client;
+    if (client != null) {
+      final userId = client.auth.currentUser?.id;
+      final payload = expense.toJson();
+      if (userId != null && !payload.containsKey('user_id')) {
+        payload['user_id'] = userId;
+      }
+      try {
+        await client.from('expenses').insert(payload);
+      } on PostgrestException catch (e) {
+        if (e.code == 'PGRST204' || e.message.contains('PGRST204') || e.message.contains('category') || e.message.contains('note')) {
+          debugPrint('Supabase addExpense PostgrestException PGRST204 fallback: ${e.message}');
+          final safePayload = Map<String, dynamic>.from(payload)
+            ..remove('category')
+            ..remove('note');
+          await client.from('expenses').insert(safePayload);
+        } else {
+          debugPrint('Supabase addExpense PostgrestException error: $e');
+          rethrow;
+        }
+      } catch (e) {
+        final errStr = e.toString();
+        if (errStr.contains('PGRST204') || errStr.contains('category') || errStr.contains('note')) {
+          debugPrint('Supabase addExpense error fallback: $e');
+          final safePayload = Map<String, dynamic>.from(payload)
+            ..remove('category')
+            ..remove('note');
+          await client.from('expenses').insert(safePayload);
+        } else {
+          debugPrint('Supabase addExpense error: $e');
+          rethrow;
+        }
+      }
+    }
+  }
+
+  Future<void> deleteExpense(dynamic id) async {
+    _inMemoryExpenses.removeWhere((e) => e.id == id);
     try {
       final client = _client;
-      if (client != null) {
-        await client.from('expenses').insert(expense.toJson());
+      if (client != null && id != null) {
+        await client.from('expenses').delete().eq('id', id);
       }
     } catch (e) {
-      debugPrint('Supabase addExpense error: $e');
+      debugPrint('Supabase deleteExpense error: $e');
+      rethrow;
     }
   }
 
