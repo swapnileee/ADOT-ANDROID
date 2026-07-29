@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -5,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:image_cropper/image_cropper.dart';
 
 class ShopInfo {
   final String name;
@@ -53,27 +53,50 @@ class ShopInfoService {
     }
   }
 
-  /// Cross-platform helper to get ImageProvider for logo
+  /// Cross-platform helper to get ImageProvider for logo (Base64, Network, or File)
   static ImageProvider? buildShopLogoImage(String path) {
-    if (path.trim().isEmpty) return null;
-    if (kIsWeb) {
-      return NetworkImage(path);
+    final trimmed = path.trim();
+    if (trimmed.isEmpty) return null;
+
+    if (trimmed.startsWith('data:image')) {
+      try {
+        final base64Str = trimmed.contains(',') ? trimmed.split(',').last : trimmed;
+        final bytes = base64Decode(base64Str);
+        return MemoryImage(bytes);
+      } catch (e) {
+        debugPrint('Error decoding base64 logo: $e');
+        return null;
+      }
     }
-    final file = File(path);
+
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return NetworkImage(trimmed);
+    }
+
+    if (kIsWeb) {
+      return NetworkImage(trimmed);
+    }
+
+    final file = File(trimmed);
     if (file.existsSync()) {
       return FileImage(file);
     }
+
     return null;
   }
 
   /// Cross-platform check if valid logo exists
   static bool hasValidLogo(String path) {
-    if (path.trim().isEmpty) return false;
+    final trimmed = path.trim();
+    if (trimmed.isEmpty) return false;
+    if (trimmed.startsWith('data:image') || trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return true;
+    }
     if (kIsWeb) return true;
-    return File(path).existsSync();
+    return File(trimmed).existsSync();
   }
 
-  /// Helper to pick image from gallery and crop it to 1:1 square ratio (with raw image fallback)
+  /// Helper to pick image from gallery and encode it as Base64 data string (bypasses ImageCropper for Android stability)
   static Future<String?> pickAndCropLogo() async {
     try {
       final picker = ImagePicker();
@@ -81,43 +104,15 @@ class ShopInfoService {
         source: ImageSource.gallery,
         maxWidth: 512,
         maxHeight: 512,
-        imageQuality: 85,
+        imageQuality: 80,
       );
 
       if (pickedFile == null) return null;
 
-      // Validate reading bytes cross-platform
-      await pickedFile.readAsBytes();
+      final Uint8List bytes = await pickedFile.readAsBytes();
+      final String base64Image = 'data:image/png;base64,${base64Encode(bytes)}';
 
-      XFile finalFile = pickedFile;
-
-      try {
-        final croppedFile = await ImageCropper().cropImage(
-          sourcePath: pickedFile.path,
-          aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
-          uiSettings: [
-            AndroidUiSettings(
-              toolbarTitle: 'লোগো সাইজ পরিবর্তন করুন',
-              toolbarColor: const Color(0xFF2E4F3E),
-              toolbarWidgetColor: Colors.white,
-              initAspectRatio: CropAspectRatioPreset.square,
-              lockAspectRatio: true,
-            ),
-            IOSUiSettings(
-              title: 'লোগো সাইজ পরিবর্তন করুন',
-              aspectRatioLockEnabled: true,
-            ),
-          ],
-        );
-
-        if (croppedFile != null) {
-          finalFile = XFile(croppedFile.path);
-        }
-      } catch (e) {
-        debugPrint('Cropper not supported on this platform, using raw image: $e');
-      }
-
-      return finalFile.path;
+      return base64Image;
     } on MissingPluginException catch (e) {
       debugPrint('Image picker MissingPluginException: $e');
       rethrow;

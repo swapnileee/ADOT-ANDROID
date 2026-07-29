@@ -651,7 +651,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: DashboardScreen.cardGreen,
         borderRadius: BorderRadius.circular(22),
