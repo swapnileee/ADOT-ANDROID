@@ -28,10 +28,10 @@ class ExpenseModel {
       category: json['category']?.toString() ?? 'অন্যান্য',
       note: json['note']?.toString(),
       expenseDate: json['expense_date'] != null
-          ? DateTime.tryParse(json['expense_date'].toString())
+          ? DateTime.tryParse(json['expense_date'].toString())?.toLocal()
           : null,
       createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString())
+          ? DateTime.tryParse(json['created_at'].toString())?.toLocal()
           : null,
     );
   }
@@ -42,7 +42,7 @@ class ExpenseModel {
       'amount': amount,
       'category': category,
       'note': note ?? '',
-      'expense_date': (expenseDate ?? DateTime.now()).toIso8601String(),
+      'expense_date': (expenseDate ?? DateTime.now()).toUtc().toIso8601String(),
     };
     if (id != null) {
       data['id'] = id;
@@ -51,7 +51,7 @@ class ExpenseModel {
       data['user_id'] = userId;
     }
     if (createdAt != null) {
-      data['created_at'] = createdAt!.toIso8601String();
+      data['created_at'] = createdAt!.toUtc().toIso8601String();
     }
     return data;
   }

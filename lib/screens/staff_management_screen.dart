@@ -266,12 +266,12 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                                     final salary = double.parse(salaryController.text.trim());
                                     if (staffToEdit == null) {
                                       final newStaff = StaffModel(
-                                        id: 'st_${DateTime.now().millisecondsSinceEpoch}',
                                         name: nameController.text.trim(),
                                         designation: designationController.text.trim(),
                                         phone: phoneController.text.trim(),
                                         joinDate: selectedJoinDate,
                                         monthlySalary: salary,
+                                        pendingSalary: salary,
                                         status: 'active',
                                         createdAt: DateTime.now(),
                                       );
@@ -290,6 +290,9 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
 
                                     if (!mounted) return;
                                     nav.pop();
+                                    await _loadData();
+                                    if (!mounted) return;
+
                                     messenger.showSnackBar(
                                       SnackBar(
                                         content: Row(
@@ -313,7 +316,6 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                                         duration: const Duration(seconds: 3),
                                       ),
                                     );
-                                    _loadData();
                                   } catch (e) {
                                      if (!mounted) return;
                                      messenger.showSnackBar(

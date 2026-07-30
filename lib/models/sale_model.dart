@@ -58,8 +58,8 @@ class SaleModel {
       dueAmount: (json['due_amount'] as num?)?.toDouble() ?? (json['dueAmount'] as num?)?.toDouble() ?? 0.0,
       paymentMethod: json['payment_method']?.toString() ?? json['paymentMethod']?.toString() ?? 'Cash',
       createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString())
-          : (json['createdAt'] != null ? DateTime.tryParse(json['createdAt'].toString()) : null),
+          ? DateTime.tryParse(json['created_at'].toString())?.toLocal()
+          : (json['createdAt'] != null ? DateTime.tryParse(json['createdAt'].toString())?.toLocal() : null),
     );
   }
 
@@ -79,7 +79,7 @@ class SaleModel {
       'due_amount': dueAmount,
       'payment_status': dueAmount > 0 ? 'due' : 'paid',
       'payment_method': paymentMethod,
-      'created_at': (createdAt ?? DateTime.now()).toIso8601String(),
+      'created_at': (createdAt ?? DateTime.now()).toUtc().toIso8601String(),
     };
     if (id != null) {
       data['id'] = id;

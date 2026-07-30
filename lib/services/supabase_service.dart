@@ -6,6 +6,7 @@ import '../models/expense_model.dart';
 import '../models/purchase_model.dart';
 import '../models/staff_model.dart';
 import '../models/salary_payment_model.dart';
+import '../models/due_collection_model.dart';
 
 class SupabaseService {
   SupabaseClient? get _client {
@@ -115,22 +116,59 @@ class SupabaseService {
   static final List<SalaryPaymentModel> _inMemorySalaryPayments = [];
 
   // --- CUSTOMER SYNC ---
-  Future<void> syncCustomer(String customerName, {String? customerPhone}) async {
-    if (customerName.trim().isEmpty || customerName.trim() == 'নগদ ক্রেতা') return;
+  Future<void> syncCustomer({
+    required String name,
+    String phone = '',
+    double dueAmount = 0.0,
+  }) async {
+    final cleanName = name.trim();
+    final cleanPhone = phone.trim();
+
+    // Skip if no customer info or generic cash buyer without due
+    if ((cleanName.isEmpty && cleanPhone.isEmpty) || (cleanName == 'নগদ ক্রেতা' && dueAmount <= 0)) return;
+
     try {
       final client = _client;
-      if (client != null) {
-        final data = <String, dynamic>{
-          'name': customerName.trim(),
-          'last_purchase_at': DateTime.now().toIso8601String(),
-        };
-        if (customerPhone != null && customerPhone.trim().isNotEmpty) {
-          data['phone'] = customerPhone.trim();
+      if (client == null) return;
+
+      List<dynamic> existingRows = [];
+
+      // STRICT MATCH: Only search by phone number if available
+      if (cleanPhone.isNotEmpty) {
+        try {
+          existingRows = await client.from('customers').select('*').eq('phone', cleanPhone);
+        } catch (e) {
+          debugPrint('Customer phone lookup error: $e');
         }
-        await client.from('customers').upsert(data, onConflict: 'name');
       }
-    } catch (e) {
-      debugPrint('Customer sync note: $e');
+
+      // If phone matches an existing customer, update them
+      if (existingRows.isNotEmpty) {
+        final existing = existingRows.first;
+        final double currentDue = (existing['total_due'] as num?)?.toDouble() ?? 0.0;
+        final double updatedDue = (currentDue + dueAmount < 0) ? 0.0 : (currentDue + dueAmount);
+
+        await client.from('customers').update({
+          'name': cleanName.isNotEmpty ? cleanName : existing['name'],
+          'phone': cleanPhone,
+          'total_due': updatedDue,
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        }).eq('id', existing['id']);
+        debugPrint('SUCCESS SUPABASE UPDATE CUSTOMER BY PHONE: ${existing['id']} | Due: $updatedDue');
+      } else {
+        // Create new customer record (For new phone OR blank phone with duplicate name)
+        final inserted = await client.from('customers').insert({
+          'name': cleanName.isEmpty ? 'নগদ ক্রেতা' : cleanName,
+          'phone': cleanPhone.isEmpty ? null : cleanPhone,
+          'total_due': dueAmount > 0 ? dueAmount : 0.0,
+          'created_at': DateTime.now().toUtc().toIso8601String(),
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        }).select().maybeSingle();
+        debugPrint('SUCCESS SUPABASE INSERT NEW CUSTOMER RECORD: $inserted');
+      }
+    } catch (e, stack) {
+      debugPrint('🚨 Error inside syncCustomer: $e');
+      debugPrint('$stack');
     }
   }
 
@@ -340,9 +378,13 @@ class SupabaseService {
     required double totalCartPrice,
     String paymentMethod = 'Cash',
   }) async {
-    final double dueAmount = (totalCartPrice - paidAmount) > 0 ? (totalCartPrice - paidAmount) : 0.0;
+    final double calculatedDue = (totalCartPrice - paidAmount) > 0 ? (totalCartPrice - paidAmount) : 0.0;
 
-    await syncCustomer(customerName, customerPhone: customerPhone);
+    await syncCustomer(
+      name: customerName,
+      phone: customerPhone ?? '',
+      dueAmount: calculatedDue,
+    );
 
     for (var item in cartItems) {
       final Product product = item['product'] as Product;
@@ -360,12 +402,13 @@ class SupabaseService {
         customerName: customerName,
         customerPhone: customerPhone,
         paidAmount: paidAmount > itemPrice ? itemPrice : paidAmount,
-        dueAmount: dueAmount,
+        dueAmount: calculatedDue,
         paymentMethod: paymentMethod,
         createdAt: DateTime.now(),
       );
 
       _inMemorySales.insert(0, sale);
+
       await deductVariantStock(
         productId: product.id,
         variantId: variant.id,
@@ -400,6 +443,50 @@ class SupabaseService {
     }
   }
 
+  /// Fetch all customers from Supabase customers table
+  Future<List<Map<String, dynamic>>> fetchCustomers() async {
+    try {
+      final client = _client;
+      if (client != null) {
+        final response = await client.from('customers').select('*').order('created_at', ascending: false);
+        return List<Map<String, dynamic>>.from(response as List);
+      }
+    } catch (e) {
+      debugPrint('Supabase fetchCustomers error: $e');
+    }
+    return [];
+  }
+
+  /// Record a custom/manual sale or due entry directly
+  Future<void> recordSale(SaleModel sale) async {
+    _inMemorySales.insert(0, sale);
+
+    // Sync customer record
+    if (sale.customerName.isNotEmpty || (sale.customerPhone != null && sale.customerPhone!.isNotEmpty)) {
+      await syncCustomer(
+        name: sale.customerName,
+        phone: sale.customerPhone ?? '',
+        dueAmount: sale.dueAmount,
+      );
+    }
+
+    final client = _client;
+    if (client != null) {
+      final payload = sale.toJson();
+      if (payload['id'] == null || payload['id'] == '') {
+        payload.remove('id');
+      }
+      try {
+        await client.from('sales').insert(payload);
+      } catch (e) {
+        debugPrint('Supabase recordSale error on sales, fallback to orders: $e');
+        try {
+          await client.from('orders').insert(payload);
+        } catch (_) {}
+      }
+    }
+  }
+
   /// Update due amount and paid amount for an existing sale
   Future<void> updateSaleDue({
     required dynamic saleId,
@@ -412,6 +499,8 @@ class SupabaseService {
     final index = _inMemorySales.indexWhere((s) => s.id.toString() == saleId.toString());
     if (index >= 0) {
       final old = _inMemorySales[index];
+      final double dueDiff = cleanDue - old.dueAmount;
+
       _inMemorySales[index] = SaleModel(
         id: old.id,
         productName: old.productName,
@@ -422,11 +511,21 @@ class SupabaseService {
         displayQuantityWithUnit: old.displayQuantityWithUnit,
         totalPrice: old.totalPrice,
         customerName: old.customerName,
+        customerPhone: old.customerPhone,
         paidAmount: newPaidAmount,
         dueAmount: cleanDue,
         paymentMethod: old.paymentMethod,
         createdAt: old.createdAt,
       );
+
+      // Sync updated due to customers table
+      if (old.customerName.isNotEmpty || (old.customerPhone != null && old.customerPhone!.isNotEmpty)) {
+        await syncCustomer(
+          name: old.customerName,
+          phone: old.customerPhone ?? '',
+          dueAmount: dueDiff,
+        );
+      }
     }
 
     try {
@@ -530,7 +629,82 @@ class SupabaseService {
     }
   }
 
+  // --- DIRECT DATE-BOUNDED ORDER QUERIES (avoids unfiltered list iteration) ---
+
+  /// Fetches today's sales total and order count using exact UTC-converted BD local midnight bounds.
+  /// Fetches today's sales stats directly using Supabase RPC function `get_today_sales_dhaka`.
+  /// Timezone logic is handled entirely by the PostgreSQL function (Asia/Dhaka).
+  /// Empty result means 0 (no fallback to unfiltered historical queries).
+  Future<Map<String, dynamic>> fetchTodayOrderStats() async {
+    double totalSales = 0.0;
+    int orderCount = 0;
+    double totalCogs = 0.0;
+    int dueCustomers = 0;
+
+    try {
+      final client = _client;
+      if (client != null) {
+        dynamic response;
+        try {
+          response = await client.rpc('get_today_sales_dhaka').single();
+        } catch (_) {
+          try {
+            response = await client.rpc('get_today_sales_bd');
+            if (response is List && response.isNotEmpty) {
+              response = response[0];
+            }
+          } catch (_) {}
+        }
+
+        if (response != null && response is Map) {
+          totalSales = ((response['total_sales'] ?? response['today_total'] ?? response['total_amount'] ?? response['total_price']) as num?)?.toDouble() ?? 0.0;
+          orderCount = ((response['order_count'] ?? response['today_count'] ?? response['count']) as num?)?.toInt() ?? 0;
+          totalCogs = ((response['total_cogs'] ?? response['cogs'] ?? response['today_cogs']) as num?)?.toDouble() ?? 0.0;
+          dueCustomers = ((response['due_customers'] ?? response['due_count']) as num?)?.toInt() ?? 0;
+        }
+      }
+    } catch (e) {
+      debugPrint('fetchTodayOrderStats error: $e');
+    }
+
+    return {
+      'totalSales': totalSales,
+      'orderCount': orderCount,
+      'totalCogs': totalCogs,
+      'dueCustomers': dueCustomers,
+    };
+  }
+
+  /// Fetches yesterday's sales total using exact UTC-converted BD local midnight bounds.
+  Future<double> fetchYesterdayOrderTotal() async {
+    final DateTime nowLocal = DateTime.now();
+    final DateTime bdTodayStart = DateTime(nowLocal.year, nowLocal.month, nowLocal.day, 0, 0, 0);
+    final DateTime bdYesterdayStart = bdTodayStart.subtract(const Duration(days: 1));
+    final DateTime bdYesterdayEnd = DateTime(bdYesterdayStart.year, bdYesterdayStart.month, bdYesterdayStart.day, 23, 59, 59, 999);
+    final String startUtc = bdYesterdayStart.toUtc().toIso8601String();
+    final String endUtc = bdYesterdayEnd.toUtc().toIso8601String();
+
+    double total = 0.0;
+    try {
+      final client = _client;
+      if (client != null) {
+        final response = await client
+            .from('orders')
+            .select('total_amount')
+            .gte('created_at', startUtc)
+            .lte('created_at', endUtc);
+        for (var row in (response as List)) {
+          total += (row['total_amount'] as num?)?.toDouble() ?? 0.0;
+        }
+      }
+    } catch (e) {
+      debugPrint('fetchYesterdayOrderTotal error: $e');
+    }
+    return total;
+  }
+
   // --- DASHBOARD METRICS ---
+
   Future<Map<String, dynamic>> fetchDashboardStats() async {
     final productsList = await fetchProducts();
     final salesList = await fetchSales();
@@ -542,22 +716,25 @@ class SupabaseService {
     int todayOrderCount = 0;
 
     for (var sale in salesList) {
-      if (sale.createdAt != null &&
-          sale.createdAt!.year == now.year &&
-          sale.createdAt!.month == now.month &&
-          sale.createdAt!.day == now.day) {
-        todaySalesTotal += sale.totalPrice;
-        todayCogsTotal += (sale.totalPrice * 0.70);
-        todayOrderCount++;
+      if (sale.createdAt != null) {
+        final saleDate = sale.createdAt!.toLocal();
+        if (saleDate.year == now.year &&
+            saleDate.month == now.month &&
+            saleDate.day == now.day) {
+          todaySalesTotal += sale.totalPrice;
+          todayCogsTotal += (sale.totalPrice * 0.70);
+          todayOrderCount++;
+        }
       }
     }
 
     double todayExpensesTotal = 0.0;
     for (var exp in expensesList) {
-      if (exp.createdAt != null &&
-          exp.createdAt!.year == now.year &&
-          exp.createdAt!.month == now.month &&
-          exp.createdAt!.day == now.day) {
+      final expDate = (exp.expenseDate ?? exp.createdAt)?.toLocal();
+      if (expDate != null &&
+          expDate.year == now.year &&
+          expDate.month == now.month &&
+          expDate.day == now.day) {
         todayExpensesTotal += exp.amount;
       }
     }
@@ -590,11 +767,57 @@ class SupabaseService {
     try {
       final client = _client;
       if (client != null) {
-        final response = await client.from('staff').select('*').order('name', ascending: true);
-        final list = (response as List).map((json) => StaffModel.fromJson(json)).toList();
-        if (list.isNotEmpty) {
-          _inMemoryStaff = list;
-          return list;
+        try {
+          final response = await client.from('employees').select('*').order('created_at', ascending: false);
+          final list = (response as List).map((json) => StaffModel.fromJson(json)).toList();
+          if (list.isNotEmpty) {
+            _inMemoryStaff = list;
+            return list;
+          }
+
+          // If employees table is empty, auto-seed the default 2 employees
+          debugPrint('Supabase employees table is empty. Auto-seeding initial staff records...');
+          final defaultStaffPayloads = [
+            {
+              'name': 'করিম হোসেন',
+              'phone': '01711223344',
+              'designation': 'ম্যানেজার ও সেলসম্যান',
+              'role': 'Manager',
+              'base_salary': 18000,
+              'pending_salary': 18000,
+              'created_at': '2025-01-01T00:00:00.000Z'
+            },
+            {
+              'name': 'রাফি ইসলাম',
+              'phone': '01899887766',
+              'designation': 'সহকারী বিক্রয়কর্মী',
+              'role': 'Assistant',
+              'base_salary': 12000,
+              'pending_salary': 12000,
+              'created_at': '2025-06-15T00:00:00.000Z'
+            },
+          ];
+
+          try {
+            await client.from('employees').insert(defaultStaffPayloads);
+            final seededResponse = await client.from('employees').select('*').order('created_at', ascending: false);
+            final seededList = (seededResponse as List).map((json) => StaffModel.fromJson(json)).toList();
+            if (seededList.isNotEmpty) {
+              _inMemoryStaff = seededList;
+              return seededList;
+            }
+          } catch (eSeeding) {
+            debugPrint('Supabase auto-seeding employees error: $eSeeding');
+          }
+        } catch (e) {
+          debugPrint('Supabase fetchStaff on employees table failed, trying staff table: $e');
+        }
+
+        final responseStaff = await client.from('staff').select('*').order('name', ascending: true);
+        final listStaff = (responseStaff as List).map((json) => StaffModel.fromJson(json)).toList();
+        if (listStaff.isNotEmpty) {
+          _inMemoryStaff = listStaff;
+          return listStaff;
         }
       }
     } catch (e) {
@@ -603,16 +826,39 @@ class SupabaseService {
     return _inMemoryStaff;
   }
 
-  Future<void> addStaff(StaffModel staff) async {
-    _inMemoryStaff.insert(0, staff);
+  Future<StaffModel?> addStaff(StaffModel staff) async {
     try {
       final client = _client;
       if (client != null) {
-        await client.from('staff').insert(staff.toJson());
+        try {
+          final payload = staff.toEmployeeJson();
+          final response = await client.from('employees').insert(payload).select().single();
+          final newStaff = StaffModel.fromJson(response);
+          _inMemoryStaff.insert(0, newStaff);
+          return newStaff;
+        } catch (e) {
+          debugPrint('Supabase addStaff on employees error, fallback to staff: $e');
+          try {
+            final fallbackPayload = staff.toJson();
+            if (fallbackPayload['id'] != null && fallbackPayload['id'].toString().startsWith('st_')) {
+              fallbackPayload.remove('id');
+            }
+            final responseStaff = await client.from('staff').insert(fallbackPayload).select().single();
+            final newStaff = StaffModel.fromJson(responseStaff);
+            _inMemoryStaff.insert(0, newStaff);
+            return newStaff;
+          } catch (e2) {
+            debugPrint('Supabase addStaff fallback error: $e2');
+            rethrow;
+          }
+        }
       }
     } catch (e) {
       debugPrint('Supabase addStaff error: $e');
+      rethrow;
     }
+    _inMemoryStaff.insert(0, staff);
+    return staff;
   }
 
   Future<void> updateStaff(StaffModel staff) async {
@@ -623,7 +869,12 @@ class SupabaseService {
     try {
       final client = _client;
       if (client != null && staff.id != null) {
-        await client.from('staff').update(staff.toJson()).eq('id', staff.id);
+        try {
+          await client.from('employees').update(staff.toEmployeeJson()).eq('id', staff.id);
+        } catch (_) {}
+        try {
+          await client.from('staff').update(staff.toJson()).eq('id', staff.id);
+        } catch (_) {}
       }
     } catch (e) {
       debugPrint('Supabase updateStaff error: $e');
@@ -652,7 +903,23 @@ class SupabaseService {
     try {
       final client = _client;
       if (client != null) {
-        await client.from('salary_payments').insert(payment.toJson());
+        try {
+          await client.from('salary_payments').insert(payment.toJson());
+        } catch (e) {
+          debugPrint('Supabase processSalaryPayment insert error: $e');
+        }
+
+        // Update employee pending_salary in Supabase
+        try {
+          await client.from('employees').update({
+            'pending_salary': 0.0,
+          }).eq('id', payment.staffId);
+        } catch (_) {}
+        try {
+          await client.from('staff').update({
+            'status': 'paid',
+          }).eq('id', payment.staffId);
+        } catch (_) {}
       }
     } catch (e) {
       debugPrint('Supabase processSalaryPayment error: $e');
@@ -662,9 +929,53 @@ class SupabaseService {
       await addExpense(ExpenseModel(
         title: '[কর্মচারী বেতন] ${payment.staffName} - ${payment.monthYear}',
         amount: payment.amountPaid,
+        category: 'Salary',
         note: payment.notes ?? 'কর্মচারী বেতন প্রদান',
         createdAt: payment.paymentDate,
       ));
+    }
+  }
+
+  // --- DUE COLLECTIONS / REPAYMENTS ---
+  static final List<DueCollectionModel> _inMemoryDueCollections = [];
+
+  Future<List<DueCollectionModel>> fetchDueCollections() async {
+    try {
+      final client = _client;
+      if (client != null) {
+        final response = await client
+            .from('due_collections')
+            .select('*')
+            .order('created_at', ascending: false);
+        return (response as List).map((json) => DueCollectionModel.fromJson(json)).toList();
+      }
+    } catch (e) {
+      debugPrint('Supabase fetchDueCollections error: $e');
+    }
+    return _inMemoryDueCollections;
+  }
+
+  Future<void> recordDueCollection({
+    required String customerName,
+    required double amount,
+    String? saleId,
+  }) async {
+    final entry = DueCollectionModel(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      saleId: saleId,
+      customerName: customerName,
+      amount: amount,
+      createdAt: DateTime.now(),
+    );
+    _inMemoryDueCollections.insert(0, entry);
+
+    try {
+      final client = _client;
+      if (client != null) {
+        await client.from('due_collections').insert(entry.toJson());
+      }
+    } catch (e) {
+      debugPrint('Supabase recordDueCollection error (fallback to in-memory): $e');
     }
   }
 }

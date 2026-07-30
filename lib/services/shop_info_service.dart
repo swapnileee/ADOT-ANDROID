@@ -300,7 +300,7 @@ class ShopInfoService {
           'address': updated.address,
           'invoice_footer': updated.invoiceFooter,
           'logo_url': updated.logoPath,
-          'updated_at': DateTime.now().toIso8601String(),
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
         };
 
         if (user != null) {

@@ -6,6 +6,7 @@ import '../services/pdf_report_service.dart';
 import '../services/shop_info_service.dart';
 import '../models/sale_model.dart';
 import '../models/expense_model.dart';
+import '../models/product_model.dart';
 import '../widgets/custom_snackbar.dart';
 import '../theme/app_theme.dart';
 
@@ -23,8 +24,10 @@ class _ReportScreenState extends State<ReportScreen> {
   bool _isLoading = true;
   bool _isExportingPdf = false;
 
+  List<ProductModel> _productsList = [];
   double _totalSales = 0.0;
   double _totalExpenses = 0.0;
+  double _totalCogs = 0.0;
   double _totalDue = 0.0;
   int _salesCount = 0;
   int _expensesCount = 0;
@@ -35,6 +38,7 @@ class _ReportScreenState extends State<ReportScreen> {
   String _exportPeriodTitle = 'এই মাস';
   double _exportSalesSum = 0.0;
   double _exportExpensesSum = 0.0;
+  double _exportCogsSum = 0.0;
   double _exportDueSum = 0.0;
   List<SaleModel> _exportSalesList = [];
 
@@ -49,30 +53,51 @@ class _ReportScreenState extends State<ReportScreen> {
     try {
       final sales = await _supabaseService.fetchSales();
       final expenses = await _supabaseService.fetchExpenses();
+      final products = await _supabaseService.fetchProducts();
 
+      final productPrices = <String, double>{};
+      for (var p in products) {
+        productPrices[p.name.trim().toLowerCase()] = p.buyingPrice;
+        if (p.id.toString().isNotEmpty) productPrices[p.id.toString()] = p.buyingPrice;
+      }
+
+      final now = DateTime.now();
       double salesSum = 0.0;
       double dueSum = 0.0;
+      double cogsSum = 0.0;
       for (var s in sales) {
-        salesSum += s.totalPrice;
-        dueSum += s.dueAmount;
+        final sDate = s.createdAt?.toLocal();
+        if (sDate != null && sDate.year == now.year && sDate.month == now.month) {
+          salesSum += s.totalPrice;
+          dueSum += s.dueAmount;
+          final key = s.productName.trim().toLowerCase();
+          final unitCost = productPrices[key] ?? (s.totalPrice * 0.70);
+          cogsSum += (s.quantity * unitCost);
+        }
       }
 
       double expensesSum = 0.0;
       for (var e in expenses) {
-        expensesSum += e.amount;
+        final expDate = (e.expenseDate ?? e.createdAt)?.toLocal();
+        if (expDate != null && expDate.year == now.year && expDate.month == now.month) {
+          expensesSum += e.amount;
+        }
       }
 
       if (!mounted) return;
       setState(() {
         _salesList = sales;
         _expensesList = expenses;
+        _productsList = products;
         _totalSales = salesSum;
         _totalExpenses = expensesSum;
+        _totalCogs = cogsSum;
         _totalDue = dueSum;
         _salesCount = sales.length;
         _expensesCount = expenses.length;
         _exportSalesSum = salesSum;
         _exportExpensesSum = expensesSum;
+        _exportCogsSum = cogsSum;
         _exportDueSum = dueSum;
         _exportSalesList = sales;
         _isLoading = false;
@@ -239,49 +264,65 @@ class _ReportScreenState extends State<ReportScreen> {
 
       if (periodTitle == 'আজ') {
         filteredSales = _salesList.where((s) {
-          if (s.createdAt == null) return false;
-          return s.createdAt!.year == now.year &&
-              s.createdAt!.month == now.month &&
-              s.createdAt!.day == now.day;
+          final sDate = s.createdAt?.toLocal();
+          if (sDate == null) return false;
+          return sDate.year == now.year &&
+              sDate.month == now.month &&
+              sDate.day == now.day;
         }).toList();
 
         for (var e in _expensesList) {
-          if (e.createdAt != null &&
-              e.createdAt!.year == now.year &&
-              e.createdAt!.month == now.month &&
-              e.createdAt!.day == now.day) {
+          final expDate = (e.expenseDate ?? e.createdAt)?.toLocal();
+          if (expDate != null &&
+              expDate.year == now.year &&
+              expDate.month == now.month &&
+              expDate.day == now.day) {
             filteredExpensesSum += e.amount;
           }
         }
       } else if (periodTitle == 'এই সপ্তাহ') {
         final startOfWeek = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
         filteredSales = _salesList.where((s) {
-          if (s.createdAt == null) return false;
-          return s.createdAt!.isAfter(startOfWeek) || s.createdAt!.isAtSameMomentAs(startOfWeek);
+          final sDate = s.createdAt?.toLocal();
+          if (sDate == null) return false;
+          return sDate.isAfter(startOfWeek) || sDate.isAtSameMomentAs(startOfWeek);
         }).toList();
 
         for (var e in _expensesList) {
-          if (e.createdAt != null && (e.createdAt!.isAfter(startOfWeek) || e.createdAt!.isAtSameMomentAs(startOfWeek))) {
+          final expDate = (e.expenseDate ?? e.createdAt)?.toLocal();
+          if (expDate != null && (expDate.isAfter(startOfWeek) || expDate.isAtSameMomentAs(startOfWeek))) {
             filteredExpensesSum += e.amount;
           }
         }
       } else {
         // 'এই মাস'
         filteredSales = _salesList.where((s) {
-          if (s.createdAt == null) return false;
-          return s.createdAt!.year == now.year && s.createdAt!.month == now.month;
+          final sDate = s.createdAt?.toLocal();
+          if (sDate == null) return false;
+          return sDate.year == now.year && sDate.month == now.month;
         }).toList();
 
         for (var e in _expensesList) {
-          if (e.createdAt != null && e.createdAt!.year == now.year && e.createdAt!.month == now.month) {
+          final expDate = (e.expenseDate ?? e.createdAt)?.toLocal();
+          if (expDate != null && expDate.year == now.year && expDate.month == now.month) {
             filteredExpensesSum += e.amount;
           }
         }
       }
 
+      double filteredCogsSum = 0.0;
+      final productPrices = <String, double>{};
+      for (var p in _productsList) {
+        productPrices[p.name.trim().toLowerCase()] = p.buyingPrice;
+        if (p.id.toString().isNotEmpty) productPrices[p.id.toString()] = p.buyingPrice;
+      }
+
       for (var s in filteredSales) {
         filteredSalesSum += s.totalPrice;
         filteredDueSum += s.dueAmount;
+        final key = s.productName.trim().toLowerCase();
+        final unitCost = productPrices[key] ?? (s.totalPrice * 0.70);
+        filteredCogsSum += (s.quantity * unitCost);
       }
 
       // Update Mounted Export Widget Render Data
@@ -289,6 +330,7 @@ class _ReportScreenState extends State<ReportScreen> {
         _exportPeriodTitle = periodTitle;
         _exportSalesSum = filteredSalesSum;
         _exportExpensesSum = filteredExpensesSum;
+        _exportCogsSum = filteredCogsSum;
         _exportDueSum = filteredDueSum;
         _exportSalesList = filteredSales;
       });
@@ -316,7 +358,7 @@ class _ReportScreenState extends State<ReportScreen> {
     }
   }
 
-  double get _netProfit => _totalSales - _totalExpenses;
+  double get _netProfit => _totalSales - _totalCogs - _totalExpenses;
 
   @override
   Widget build(BuildContext context) {
@@ -347,7 +389,7 @@ class _ReportScreenState extends State<ReportScreen> {
                   currentDate: DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now()),
                   totalSales: _exportSalesSum,
                   totalExpenses: _exportExpensesSum,
-                  netProfit: _exportSalesSum - _exportExpensesSum,
+                  netProfit: _exportSalesSum - _exportCogsSum - _exportExpensesSum,
                   totalDue: _exportDueSum,
                   salesList: _exportSalesList.take(25).map((sale) => {
                     'product_name': sale.productName,

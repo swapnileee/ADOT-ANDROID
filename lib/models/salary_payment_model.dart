@@ -39,9 +39,9 @@ class SalaryPaymentModel {
           json['month_year']?.toString() ?? json['monthYear']?.toString() ?? '',
       notes: json['notes']?.toString(),
       createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString())
+          ? DateTime.tryParse(json['created_at'].toString())?.toLocal()
           : (json['createdAt'] != null
-              ? DateTime.tryParse(json['createdAt'].toString())
+              ? DateTime.tryParse(json['createdAt'].toString())?.toLocal()
               : null),
     );
   }
@@ -51,10 +51,10 @@ class SalaryPaymentModel {
       'staff_id': staffId,
       'staff_name': staffName,
       'amount_paid': amountPaid,
-      'payment_date': paymentDate.toIso8601String(),
+      'payment_date': paymentDate.toUtc().toIso8601String(),
       'month_year': monthYear,
       'notes': notes,
-      'created_at': (createdAt ?? DateTime.now()).toIso8601String(),
+      'created_at': (createdAt ?? DateTime.now()).toUtc().toIso8601String(),
     };
     if (id != null) {
       data['id'] = id;

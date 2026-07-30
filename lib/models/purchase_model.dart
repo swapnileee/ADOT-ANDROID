@@ -49,8 +49,8 @@ class PurchaseModel {
       supplierName: json['supplier_name']?.toString() ?? json['supplierName']?.toString(),
       notes: json['notes']?.toString(),
       createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString())
-          : (json['createdAt'] != null ? DateTime.tryParse(json['createdAt'].toString()) : null),
+          ? DateTime.tryParse(json['created_at'].toString())?.toLocal()
+          : (json['createdAt'] != null ? DateTime.tryParse(json['createdAt'].toString())?.toLocal() : null),
     );
   }
 
@@ -65,7 +65,7 @@ class PurchaseModel {
       'total_cost': totalCost,
       'supplier_name': supplierName,
       'notes': notes,
-      'created_at': (createdAt ?? DateTime.now()).toIso8601String(),
+      'created_at': (createdAt ?? DateTime.now()).toUtc().toIso8601String(),
     };
     if (id != null) {
       data['id'] = id;

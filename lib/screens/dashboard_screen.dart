@@ -13,6 +13,7 @@ import 'low_stock_screen.dart';
 import 'dues_screen.dart';
 import 'stock_in_screen.dart';
 import 'staff_management_screen.dart';
+import 'notification_center_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final VoidCallback onNavigateToPOS;
@@ -36,29 +37,65 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObserver {
   final SupabaseService _supabaseService = SupabaseService();
 
   bool _isLoading = true;
   double _todaySales = 0.0;
   double _todayExpenses = 0.0;
   double _todayNetProfit = 0.0;
+  double _yesterdayExpenses = 0.0;
+  double _yesterdayNetProfit = 0.0;
+  String _lastUpdatedTime = '';
   double _totalDue = 0.0;
   int _totalProducts = 0;
   int _lowStockCount = 0;
   int _outOfStockCount = 0;
   int _todayOrderCount = 0;
-  List<SaleModel> _recentSales = [];
+  final List<SaleModel> _recentSales = [];
   List<SaleModel> _allSales = [];
 
   // Interactive Filter & Notification Badge State
   String _selectedSalesFilter = 'আজ';
   int _unreadNotificationCount = 3;
 
+  // Yesterday's sales fetched directly from Supabase with UTC-converted BD bounds
+  double _yesterdaySales = 0.0;
+  DateTime _lastLoadedDate = DateTime.now();
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _lastLoadedDate = DateTime.now();
     _loadDashboardData();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      final now = DateTime.now();
+      if (now.day != _lastLoadedDate.day || now.month != _lastLoadedDate.month || now.year != _lastLoadedDate.year) {
+        _resetTodayState();
+      }
+      _loadDashboardData();
+    }
+  }
+
+  void _resetTodayState() {
+    if (!mounted) return;
+    setState(() {
+      _todaySales = 0.0;
+      _todayOrderCount = 0;
+      _todayExpenses = 0.0;
+      _todayNetProfit = 0.0;
+    });
   }
 
   String get _formattedCurrentDate {
@@ -72,9 +109,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   double get _displayedSalesAmount {
+    // For 'আজ': use the direct Supabase-queried value (UTC-aligned BD midnight bounds).
+    // This is the single source of truth — same value shown in the summary strip.
+    if (_selectedSalesFilter == 'আজ') return _todaySales;
+
     final now = DateTime.now();
     DateTime startCurrent;
-    DateTime endCurrent = DateTime(now.year, now.month, now.day, 23, 59, 59);
+    final DateTime endCurrent = DateTime(now.year, now.month, now.day, 23, 59, 59, 999);
 
     switch (_selectedSalesFilter) {
       case 'এই সপ্তাহ':
@@ -84,11 +125,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         startCurrent = DateTime(now.year, now.month, 1);
         break;
       case 'এই বছর':
-        startCurrent = DateTime(now.year, 1, 1);
-        break;
-      case 'আজ':
       default:
-        startCurrent = DateTime(now.year, now.month, now.day);
+        startCurrent = DateTime(now.year, 1, 1);
         break;
     }
 
@@ -96,21 +134,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     for (var sale in _allSales) {
       if (sale.createdAt != null) {
         final saleDate = sale.createdAt!.toLocal();
-        if (saleDate.isAfter(startCurrent.subtract(const Duration(milliseconds: 1))) &&
-            saleDate.isBefore(endCurrent.add(const Duration(milliseconds: 1)))) {
+        if (!saleDate.isBefore(startCurrent) && !saleDate.isAfter(endCurrent)) {
           total += sale.totalPrice;
         }
       }
     }
-
-    if (total == 0.0 && _selectedSalesFilter == 'আজ' && _todaySales > 0) {
-      return _todaySales;
-    }
-
     return total;
   }
 
   double get _displayedPreviousSalesAmount {
+    // For 'আজ' filter: use the real Supabase-fetched yesterday total (UTC-aligned BD bounds)
+    if (_selectedSalesFilter == 'আজ') return _yesterdaySales;
+
     final now = DateTime.now();
     DateTime startPrev;
     DateTime endPrev;
@@ -129,14 +164,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         endPrev = startCurrent.subtract(const Duration(milliseconds: 1));
         break;
       case 'এই বছর':
+      default:
         final startCurrent = DateTime(now.year, 1, 1);
         startPrev = DateTime(now.year - 1, 1, 1);
-        endPrev = startCurrent.subtract(const Duration(milliseconds: 1));
-        break;
-      case 'আজ':
-      default:
-        final startCurrent = DateTime(now.year, now.month, now.day);
-        startPrev = startCurrent.subtract(const Duration(days: 1));
         endPrev = startCurrent.subtract(const Duration(milliseconds: 1));
         break;
     }
@@ -145,8 +175,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     for (var sale in _allSales) {
       if (sale.createdAt != null) {
         final saleDate = sale.createdAt!.toLocal();
-        if (saleDate.isAfter(startPrev.subtract(const Duration(milliseconds: 1))) &&
-            saleDate.isBefore(endPrev.add(const Duration(milliseconds: 1)))) {
+        if (!saleDate.isBefore(startPrev) && !saleDate.isAfter(endPrev)) {
           total += sale.totalPrice;
         }
       }
@@ -197,52 +226,114 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _loadDashboardData() async {
+    final nowCheck = DateTime.now();
+    if (nowCheck.day != _lastLoadedDate.day || nowCheck.month != _lastLoadedDate.month || nowCheck.year != _lastLoadedDate.year) {
+      _resetTodayState();
+    }
+    _lastLoadedDate = nowCheck;
+
     setState(() => _isLoading = true);
     try {
-      final stats = await _supabaseService.fetchDashboardStats();
+      // 1. Direct date-bounded Supabase queries for BD local midnight boundaries
+      final todayStats = await _supabaseService.fetchTodayOrderStats();
+      final realTodaySales = (todayStats['totalSales'] as double?) ?? 0.0;
+      final realTodayOrderCount = (todayStats['orderCount'] as int?) ?? 0;
+      final realYesterdaySales = await _supabaseService.fetchYesterdayOrderTotal();
+
+      // 2. Fetch supporting data (expenses, products, all sales for display list)
       final sales = await _supabaseService.fetchSales();
       final products = await _supabaseService.fetchProducts();
+      final expenses = await _supabaseService.fetchExpenses();
 
       int outCount = 0;
       for (var p in products) {
         if (p.totalStock <= 0) outCount++;
       }
 
-      double computedTodaySales = 0.0;
-      int computedTodayOrders = 0;
       final now = DateTime.now();
-      final todayStart = DateTime(now.year, now.month, now.day);
-      final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
+      final bdTodayStart = DateTime(now.year, now.month, now.day, 0, 0, 0);
+      final bdTodayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59, 999);
+      final bdYesterdayStart = bdTodayStart.subtract(const Duration(days: 1));
+      final bdYesterdayEnd = DateTime(bdYesterdayStart.year, bdYesterdayStart.month, bdYesterdayStart.day, 23, 59, 59, 999);
 
-      for (var sale in sales) {
-        if (sale.createdAt != null) {
-          final saleDate = sale.createdAt!.toLocal();
-          if (saleDate.isAfter(todayStart.subtract(const Duration(milliseconds: 1))) &&
-              saleDate.isBefore(todayEnd.add(const Duration(milliseconds: 1)))) {
-            computedTodaySales += sale.totalPrice;
-            computedTodayOrders++;
+      // Compute expenses (still from cached list; column is expense_date not created_at)
+      double computedTodayExpenses = 0.0;
+      double computedYesterdayExpenses = 0.0;
+      double computedTotalDue = 0.0;
+
+      for (var exp in expenses) {
+        final expDate = (exp.expenseDate ?? exp.createdAt)?.toLocal();
+        if (expDate != null) {
+          if (!expDate.isBefore(bdTodayStart) && !expDate.isAfter(bdTodayEnd)) {
+            computedTodayExpenses += exp.amount;
+          } else if (!expDate.isBefore(bdYesterdayStart) && !expDate.isAfter(bdYesterdayEnd)) {
+            computedYesterdayExpenses += exp.amount;
           }
         }
       }
 
-      final statSales = (stats['todaySales'] as num?)?.toDouble() ?? 0.0;
-      final finalTodaySales = computedTodaySales > 0 ? computedTodaySales : statSales;
-      final statOrders = (stats['todayOrderCount'] as int?) ?? 0;
-      final finalTodayOrders = computedTodayOrders > 0 ? computedTodayOrders : statOrders;
+      final realTodayCogs = (todayStats['totalCogs'] as double?) ?? 0.0;
+
+      // Build map of product buying prices for COGS calculation
+      final productBuyingPrices = <String, double>{};
+      for (var p in products) {
+        productBuyingPrices[p.name.trim().toLowerCase()] = p.buyingPrice;
+        if (p.id.toString().isNotEmpty) {
+          productBuyingPrices[p.id.toString()] = p.buyingPrice;
+        }
+      }
+
+      double computedTodayCogs = realTodayCogs;
+      double computedYesterdayCogs = 0.0;
+
+      for (var sale in sales) {
+        if (sale.createdAt != null) {
+          final saleDate = sale.createdAt!.toLocal();
+          final key = sale.productName.trim().toLowerCase();
+          final unitCost = productBuyingPrices[key] ?? (sale.totalPrice * 0.70);
+          final saleCogs = sale.quantity * unitCost;
+
+          if (!saleDate.isBefore(bdTodayStart) && !saleDate.isAfter(bdTodayEnd)) {
+            if (computedTodayCogs == 0.0) {
+              computedTodayCogs += saleCogs;
+            }
+          } else if (!saleDate.isBefore(bdYesterdayStart) && !saleDate.isAfter(bdYesterdayEnd)) {
+            computedYesterdayCogs += saleCogs;
+          }
+        }
+        if (sale.dueAmount > 0) computedTotalDue += sale.dueAmount;
+      }
+
+      final finalTodaySales = realTodaySales;
+      final finalTodayOrderCount = realTodayOrderCount;
+
+      final netProfitToday = finalTodaySales - computedTodayCogs - computedTodayExpenses;
+      final netProfitYesterday = realYesterdaySales - computedYesterdayCogs - computedYesterdayExpenses;
+      final updatedTimeText = DateFormat('hh:mm a').format(now);
 
       if (!mounted) return;
       setState(() {
         _todaySales = finalTodaySales;
-        _todayExpenses = (stats['todayExpenses'] as num?)?.toDouble() ?? 0.0;
-        _todayNetProfit = (stats['todayNetProfit'] as num?)?.toDouble() ?? (_todaySales - _todayExpenses - (_todaySales * 0.70));
-        _totalDue = (stats['totalDue'] as num?)?.toDouble() ?? 0.0;
-        _totalProducts = (stats['totalProducts'] as int?) ?? 0;
-        _lowStockCount = (stats['lowStockCount'] as int?) ?? 0;
-        _todayOrderCount = finalTodayOrders;
+        _todayExpenses = computedTodayExpenses;
+        _todayNetProfit = netProfitToday;
+        _yesterdayExpenses = computedYesterdayExpenses;
+        _yesterdayNetProfit = netProfitYesterday;
+        _lastUpdatedTime = updatedTimeText;
+        _totalDue = computedTotalDue;
+        _totalProducts = products.length;
+        _lowStockCount = products.where((p) => p.isLowStock).length;
+        _todayOrderCount = finalTodayOrderCount;
         _outOfStockCount = outCount;
         _allSales = sales;
-        _recentSales = sales.take(5).toList();
-        _unreadNotificationCount = _lowStockCount > 0 ? 3 : 1;
+        _recentSales.clear();
+        _recentSales.addAll(sales.take(5));
+        if (_dashboardNotifications.isNotEmpty) {
+          _unreadNotificationCount = _dashboardNotifications.where((n) => !n.isRead).length;
+        } else {
+          _unreadNotificationCount = _lowStockCount > 0 ? 3 : 1;
+        }
+        // Store yesterday's sales for comparison in the main card
+        _yesterdaySales = realYesterdaySales;
         _isLoading = false;
       });
     } catch (e) {
@@ -251,6 +342,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       CustomSnackBar.showError(context, 'ড্যাশবোর্ড ডাটা লোড করতে সমস্যা হয়েছে: $e');
     }
   }
+
 
   void _showAddExpenseModal() {
     final formKey = GlobalKey<FormState>();
@@ -392,67 +484,70 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  void _showNotificationCenter() {
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          title: const Row(
-            children: [
-              Icon(Icons.notifications_active_rounded, color: DashboardScreen.primaryGreen),
-              SizedBox(width: 8),
-              Text('নোটিফিকেশন সেন্টার', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                dense: true,
-                leading: const Icon(Icons.warning_amber_rounded, color: AppTheme.errorRed),
-                title: Text('$_lowStockCount টি পণ্যে কম স্টক রয়েছে'),
-                subtitle: const Text('স্টক রি-অর্ডার করার অনুরোধ করা হচ্ছে'),
-              ),
-              const Divider(),
-              const ListTile(
-                dense: true,
-                leading: Icon(Icons.people_outline_rounded, color: AppTheme.warningOrange),
-                title: Text('কর্মচারীদের বকেয়া বেতন'),
-                subtitle: Text('চলতি মাসের ১ জনের বেতন প্রক্রিয়াধীন'),
-              ),
-              const Divider(),
-              const ListTile(
-                dense: true,
-                leading: Icon(Icons.mark_email_unread_rounded, color: DashboardScreen.primaryGreen),
-                title: Text('গ্রাহকদের বকেয়া তাগাদা'),
-                subtitle: Text('আজকের ৩টি বকেয়া তাগাদা অনুস্মারক'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                setState(() {
-                  _unreadNotificationCount = 0;
-                });
-                Navigator.pop(dialogContext);
-                CustomSnackBar.showSuccess(context, 'সকল নোটিফিকেশন ক্লিয়ার করা হয়েছে!');
-              },
-              child: const Text('সব ক্লিয়ার করুন', style: TextStyle(color: AppTheme.errorRed, fontWeight: FontWeight.bold)),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: DashboardScreen.primaryGreen,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              child: const Text('বন্ধ করুন', style: TextStyle(color: Colors.white)),
-            ),
-          ],
-        );
-      },
+  List<AppNotification> _dashboardNotifications = [];
+
+  void _initDashboardNotifications() {
+    if (_dashboardNotifications.isEmpty) {
+      _dashboardNotifications = [
+        AppNotification(
+          id: '1',
+          title: '$_lowStockCount টি পণ্যে কম স্টক রয়েছে',
+          message: 'জরুরি স্টক রি-অর্ডার করার অনুরোধ করা হচ্ছে',
+          timeAgo: '২ মিনিট আগে',
+          type: NotificationType.urgent,
+          actionText: 'স্টক দেখুন',
+          icon: Icons.warning_amber_rounded,
+          onAction: () {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const LowStockScreen()));
+          },
+        ),
+        AppNotification(
+          id: '2',
+          title: 'কর্মচারীদের বকেয়া বেতন',
+          message: 'চলতি মাসের ১ জনের বেতন প্রক্রিয়াধীন রয়েছে',
+          timeAgo: '১০ মিনিট আগে',
+          type: NotificationType.pending,
+          actionText: 'বেতন দিন',
+          icon: Icons.schedule_rounded,
+          onAction: () {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const StaffManagementScreen()));
+          },
+        ),
+        AppNotification(
+          id: '3',
+          title: 'গ্রাহকদের বকেয়া তাগাদা',
+          message: 'আজকের ৩টি বকেয়া তাগাদা অনুস্মারক তৈরি হয়েছে',
+          timeAgo: '২৫ মিনিট আগে',
+          type: NotificationType.urgent,
+          actionText: 'বাকির তালিকা',
+          icon: Icons.mark_email_unread_rounded,
+          onAction: () {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const DuesScreen()));
+          },
+        ),
+      ];
+    }
+  }
+
+  Future<void> _showNotificationCenter() async {
+    _initDashboardNotifications();
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => NotificationCenterScreen(
+          notifications: _dashboardNotifications,
+        ),
+      ),
     );
+    if (mounted) {
+      setState(() {
+        if (result is int) {
+          _unreadNotificationCount = result;
+        } else {
+          _unreadNotificationCount = _dashboardNotifications.where((n) => !n.isRead).length;
+        }
+      });
+    }
   }
 
   @override
@@ -489,7 +584,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                           // 3. MAIN CARDS: TODAY'S SALES
                           _buildMainMetricsCards(),
-                          const SizedBox(height: 8.0),
+                          const SizedBox(height: 10.0),
 
                           // 4. 2x2 GRID (PROFIT, EXPENSE, CASH, DUE)
                           _buildSecondaryMetricsGrid(),
@@ -677,7 +772,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // 3. MAIN METRICS (GREEN CARD WITH INTERACTIVE FILTER)
   Widget _buildMainMetricsCards() {
+    final double previous = _displayedPreviousSalesAmount;
+    final double current = _displayedSalesAmount;
     final double growth = _displayedGrowthPercentage;
+    final bool hasPrevData = previous > 0;
     final bool isPositive = growth >= 0;
     final Color accentColor = isPositive ? Colors.greenAccent : Colors.orangeAccent;
     final IconData arrowIcon = isPositive ? Icons.arrow_upward : Icons.arrow_downward;
@@ -727,18 +825,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          Text('৳ ${_displayedSalesAmount.toStringAsFixed(0)}', style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+          Text('৳ ${current.toStringAsFixed(0)}', style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           Row(
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(color: accentColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(6)),
+                decoration: BoxDecoration(
+                  color: (hasPrevData || current > 0) ? accentColor.withValues(alpha: 0.2) : Colors.white12,
+                  borderRadius: BorderRadius.circular(6),
+                ),
                 child: Row(
                   children: [
-                    Icon(arrowIcon, color: accentColor, size: 12),
-                    const SizedBox(width: 2),
-                    Text('${growth.abs().toStringAsFixed(0)}%', style: TextStyle(color: accentColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                    if (hasPrevData || current > 0) ...[
+                      Icon(arrowIcon, color: accentColor, size: 12),
+                      const SizedBox(width: 2),
+                      Text('${isPositive && growth > 0 ? "+" : ""}${growth.abs().toStringAsFixed(0)}%', style: TextStyle(color: accentColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                    ] else ...[
+                      const Text('0%', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500)),
+                    ],
                   ],
                 ),
               ),
@@ -755,18 +860,58 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildSecondaryMetricsGrid() {
+    String profitSubtext;
+    if (_yesterdayNetProfit > 0) {
+      double diff = ((_todayNetProfit - _yesterdayNetProfit) / _yesterdayNetProfit) * 100;
+      String sign = diff >= 0 ? '+' : '';
+      profitSubtext = '$sign${diff.toStringAsFixed(0)}% গতকালের তুলনায়';
+    } else if (_yesterdayNetProfit == 0) {
+      if (_todayNetProfit > 0) {
+        profitSubtext = '+১০০% গতকালের তুলনায়';
+      } else {
+        profitSubtext = 'গতকালের উপাত্ত নেই';
+      }
+    } else {
+      // _yesterdayNetProfit < 0 (yesterday was a loss)
+      if (_todayNetProfit >= 0) {
+        profitSubtext = 'লোকসান থেকে লাভে';
+      } else {
+        if (_todayNetProfit > _yesterdayNetProfit) {
+          profitSubtext = 'লোকসান কমেছে';
+        } else if (_todayNetProfit < _yesterdayNetProfit) {
+          profitSubtext = 'লোকসান বেড়েছে';
+        } else {
+          profitSubtext = 'একই লোকসান';
+        }
+      }
+    }
+
+    String expenseSubtext;
+    if (_yesterdayExpenses > 0) {
+      double diff = ((_todayExpenses - _yesterdayExpenses) / _yesterdayExpenses) * 100;
+      String sign = diff >= 0 ? '+' : '';
+      expenseSubtext = '$sign${diff.toStringAsFixed(0)}% গতকালের তুলনায়';
+    } else if (_todayExpenses > 0) {
+      expenseSubtext = 'আজকের মোট খরচ';
+    } else {
+      expenseSubtext = 'গতকালের উপাত্ত নেই';
+    }
+
+    String cashSubtext = _lastUpdatedTime.isNotEmpty ? 'আপডেট: আজ $_lastUpdatedTime' : 'আপডেট: আজ';
+
     return GridView.count(
+      padding: EdgeInsets.zero,
       crossAxisCount: 2,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       crossAxisSpacing: 10,
       mainAxisSpacing: 10,
-      childAspectRatio: 1.5,
+      childAspectRatio: 1.65,
       children: [
-        _buildSecondaryCard('নিট লাভ', '৳ ${_todayNetProfit.toStringAsFixed(0)}', '+১২% গতকালের তুলনায়', Icons.trending_up, const Color(0xFF2E7D32)),
-        _buildSecondaryCard('মোট খরচ', '৳ ${_todayExpenses.toStringAsFixed(0)}', '-৮% গতকালের তুলনায়', Icons.trending_down, const Color(0xFFD32F2F)),
-        _buildSecondaryCard('হাতে নগদ', '৳ ${_cashInHand.toStringAsFixed(0)}', 'আপডেট: আজ ১০:১৫ AM', Icons.account_balance_wallet_outlined, const Color(0xFF1565C0)),
-        _buildSecondaryCard('বকেয়া আদায়যোগ্য', '৳ ${_totalDue.toStringAsFixed(0)}', '৩ জন গ্রাহকের কাছে', Icons.receipt_outlined, const Color(0xFFEF6C00)),
+        _buildSecondaryCard('নিট লাভ', '৳ ${_todayNetProfit.toStringAsFixed(0)}', profitSubtext, Icons.trending_up, const Color(0xFF2E7D32)),
+        _buildSecondaryCard('মোট খরচ', '৳ ${_todayExpenses.toStringAsFixed(0)}', expenseSubtext, Icons.trending_down, const Color(0xFFD32F2F)),
+        _buildSecondaryCard('হাতে নগদ', '৳ ${_cashInHand.toStringAsFixed(0)}', cashSubtext, Icons.account_balance_wallet_outlined, const Color(0xFF1565C0)),
+        _buildSecondaryCard('বকেয়া আদায়যোগ্য', '৳ ${_totalDue.toStringAsFixed(0)}', 'গ্রাহকের নিকট মোট বকেয়া', Icons.receipt_outlined, const Color(0xFFEF6C00)),
       ],
     );
   }
