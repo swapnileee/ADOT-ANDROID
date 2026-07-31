@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
+import '../config/app_constants.dart';
 import '../services/supabase_service.dart';
+import '../services/refresh_signal.dart';
 import '../models/product_model.dart';
 import '../widgets/custom_snackbar.dart';
 import '../theme/app_theme.dart';
@@ -11,31 +13,42 @@ class InventoryScreen extends StatefulWidget {
   const InventoryScreen({super.key});
 
   @override
-  State<InventoryScreen> createState() => _InventoryScreenState();
+  State<InventoryScreen> createState() => InventoryScreenState();
 }
 
-class _InventoryScreenState extends State<InventoryScreen> {
+class InventoryScreenState extends State<InventoryScreen> {
   final SupabaseService _supabaseService = SupabaseService();
 
   List<Product> _products = [];
   List<Product> _filteredProducts = [];
   String _searchQuery = '';
   String _selectedCategoryFilter = 'সকল';
+  String _selectedSortOption = 'সর্বশেষ যোগ';
   bool _isLoading = true;
 
-  final List<String> _categoryFilters = [
-    'সকল',
-    'তেল',
-    'শস্য ও ডাল',
-    'মধু',
-    'ডিম ও দুধ',
-    'ফল',
-  ];
+  final List<String> _categoryFilters = AppConstants.defaultCategories;
 
   @override
   void initState() {
     super.initState();
+    RefreshSignal().addListener(_onRefreshSignal);
     _loadProducts();
+  }
+
+  void _onRefreshSignal() {
+    if (mounted) {
+      _loadProducts();
+    }
+  }
+
+  void refreshData() {
+    _loadProducts();
+  }
+
+  @override
+  void dispose() {
+    RefreshSignal().removeListener(_onRefreshSignal);
+    super.dispose();
   }
 
   Future<void> _loadProducts() async {
@@ -67,9 +80,154 @@ class _InventoryScreenState extends State<InventoryScreen> {
       temp = temp.where((p) => p.name.toLowerCase().contains(q) || p.category.toLowerCase().contains(q) || p.supplier.toLowerCase().contains(q)).toList();
     }
 
+    switch (_selectedSortOption) {
+      case 'নাম (A-Z)':
+        temp.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        break;
+      case 'দাম (কম থেকে বেশি)':
+        temp.sort((a, b) => a.minPrice.compareTo(b.minPrice));
+        break;
+      case 'দাম (বেশি থেকে কম)':
+        temp.sort((a, b) => b.minPrice.compareTo(a.minPrice));
+        break;
+      case 'স্টক (কম থেকে বেশি)':
+        temp.sort((a, b) => a.totalStock.compareTo(b.totalStock));
+        break;
+      case 'সর্বশেষ যোগ':
+      default:
+        break;
+    }
+
     setState(() {
       _filteredProducts = temp;
     });
+  }
+
+  void _showFilterBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.creamBg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final Set<String> categories = {
+              'সকল',
+              ..._categoryFilters,
+              ..._products.map((p) => p.category.trim()).where((c) => c.isNotEmpty)
+            };
+
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 16.0,
+                  right: 16.0,
+                  top: 20.0,
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 16.0,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'পণ্য ফিল্টার ও ক্যাটাগরি',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primaryGreen),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ],
+                      ),
+                      const Divider(),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'ক্যাটাগরি বাছাই করুন',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey),
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8.0,
+                        runSpacing: 8.0,
+                        children: categories.map((category) {
+                          final isSelected = _selectedCategoryFilter == category;
+                          return ChoiceChip(
+                            label: Text(category),
+                            selected: isSelected,
+                            selectedColor: AppTheme.primaryGreen,
+                            backgroundColor: Colors.white,
+                            labelStyle: TextStyle(
+                              color: isSelected ? Colors.white : AppTheme.textDark,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              side: BorderSide(
+                                color: isSelected ? AppTheme.primaryGreen : AppTheme.cardBorderColor,
+                              ),
+                            ),
+                            onSelected: (bool selected) {
+                              if (selected) {
+                                setState(() {
+                                  _selectedCategoryFilter = category;
+                                  _applyFilters();
+                                });
+                                Navigator.pop(context);
+                              }
+                            },
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 20),
+                      const Text(
+                        'সর্টিং বাছাই করুন',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey),
+                      ),
+                      const SizedBox(height: 8),
+                      ...[
+                        'সর্বশেষ যোগ',
+                        'নাম (A-Z)',
+                        'দাম (কম থেকে বেশি)',
+                        'দাম (বেশি থেকে কম)',
+                        'স্টক (কম থেকে বেশি)',
+                      ].map((sortOpt) {
+                        final isSel = _selectedSortOption == sortOpt;
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            sortOpt,
+                            style: TextStyle(
+                              fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                              color: isSel ? AppTheme.primaryGreen : AppTheme.textDark,
+                            ),
+                          ),
+                          trailing: isSel ? const Icon(Icons.check_circle_rounded, color: AppTheme.primaryGreen) : null,
+                          onTap: () {
+                            setState(() {
+                              _selectedSortOption = sortOpt;
+                              _applyFilters();
+                            });
+                            Navigator.pop(context);
+                          },
+                        );
+                      }),
+                      const SizedBox(height: 12),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _openAddProductScreen({Product? productToEdit}) async {
@@ -110,13 +268,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
         ),
         title: const Text('পণ্য সমূহ'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.search_rounded),
-            onPressed: () {
-              // Focus search bar
-            },
-            tooltip: 'খুঁজুন',
-          ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             onPressed: _loadProducts,
@@ -174,9 +325,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                             ),
                             child: IconButton(
                               icon: const Icon(Icons.tune_rounded, color: Colors.white),
-                              onPressed: () {
-                                // Toggle category filter
-                              },
+                              onPressed: _showFilterBottomSheet,
                             ),
                           ),
                         ],

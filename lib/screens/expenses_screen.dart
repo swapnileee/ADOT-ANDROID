@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../services/supabase_service.dart';
+import '../services/refresh_signal.dart';
 import '../models/expense_model.dart';
 import '../widgets/custom_snackbar.dart';
 import '../theme/app_theme.dart';
@@ -10,10 +11,10 @@ class ExpensesScreen extends StatefulWidget {
   const ExpensesScreen({super.key});
 
   @override
-  State<ExpensesScreen> createState() => _ExpensesScreenState();
+  State<ExpensesScreen> createState() => ExpensesScreenState();
 }
 
-class _ExpensesScreenState extends State<ExpensesScreen> {
+class ExpensesScreenState extends State<ExpensesScreen> {
   final SupabaseService _supabaseService = SupabaseService();
   final _formKey = GlobalKey<FormState>();
 
@@ -68,11 +69,23 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   @override
   void initState() {
     super.initState();
+    RefreshSignal().addListener(_onRefreshSignal);
+    _loadExpenses();
+  }
+
+  void _onRefreshSignal() {
+    if (mounted) {
+      _loadExpenses();
+    }
+  }
+
+  void refreshData() {
     _loadExpenses();
   }
 
   @override
   void dispose() {
+    RefreshSignal().removeListener(_onRefreshSignal);
     _titleController.dispose();
     _amountController.dispose();
     _noteController.dispose();
@@ -261,6 +274,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       _noteController.clear();
       Navigator.pop(context);
       _loadExpenses();
+      RefreshSignal().notifyDataChanged();
     } catch (e) {
       if (!mounted) return;
       CustomSnackBar.showError(context, 'খরচ যোগ করতে ত্রুটি হয়েছে: $e');
@@ -298,6 +312,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
         if (!mounted) return;
         CustomSnackBar.showSuccess(context, 'খরচ মুছে ফেলা হয়েছে');
         _loadExpenses();
+        RefreshSignal().notifyDataChanged();
       } catch (e) {
         if (!mounted) return;
         CustomSnackBar.showError(context, 'খরচ মুছতে ত্রুটি: $e');

@@ -17,9 +17,38 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
 
+  final GlobalKey<DashboardScreenState> _dashboardKey = GlobalKey();
+  final GlobalKey<InventoryScreenState> _inventoryKey = GlobalKey();
+  final GlobalKey<POSScreenState> _posKey = GlobalKey();
+  final GlobalKey<OrdersScreenState> _ordersKey = GlobalKey();
+  final GlobalKey<ExpensesScreenState> _expensesKey = GlobalKey();
+
   void _navigateToTab(int index) {
     setState(() {
       _currentIndex = index;
+    });
+    _triggerTabRefresh(index);
+  }
+
+  void _triggerTabRefresh(int index) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      switch (index) {
+        case 0:
+          _dashboardKey.currentState?.refreshData();
+          break;
+        case 1:
+          _inventoryKey.currentState?.refreshData();
+          break;
+        case 2:
+          _posKey.currentState?.refreshData();
+          break;
+        case 3:
+          _ordersKey.currentState?.refreshData();
+          break;
+        case 4:
+          _expensesKey.currentState?.refreshData();
+          break;
+      }
     });
   }
 
@@ -27,14 +56,15 @@ class _MainScreenState extends State<MainScreen> {
   Widget build(BuildContext context) {
     final List<Widget> screens = [
       DashboardScreen(
+        key: _dashboardKey,
         onNavigateToPOS: () => _navigateToTab(2),
         onNavigateToInventory: () => _navigateToTab(1),
         onNavigateToOrders: () => _navigateToTab(3),
       ),
-      const InventoryScreen(),
-      const POSScreen(),
-      const OrdersScreen(),
-      const ExpensesScreen(),
+      InventoryScreen(key: _inventoryKey),
+      POSScreen(key: _posKey),
+      OrdersScreen(key: _ordersKey),
+      ExpensesScreen(key: _expensesKey),
     ];
 
     return Scaffold(
@@ -53,11 +83,7 @@ class _MainScreenState extends State<MainScreen> {
         child: SafeArea(
           child: BottomNavigationBar(
             currentIndex: _currentIndex,
-            onTap: (index) {
-              setState(() {
-                _currentIndex = index;
-              });
-            },
+            onTap: _navigateToTab,
             items: const [
               BottomNavigationBarItem(
                 icon: Icon(Icons.dashboard_outlined),

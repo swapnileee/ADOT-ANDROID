@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../services/supabase_service.dart';
+import '../services/refresh_signal.dart';
 import '../models/sale_model.dart';
 import '../widgets/custom_snackbar.dart';
 import '../theme/app_theme.dart';
@@ -10,10 +11,10 @@ class OrdersScreen extends StatefulWidget {
   const OrdersScreen({super.key});
 
   @override
-  State<OrdersScreen> createState() => _OrdersScreenState();
+  State<OrdersScreen> createState() => OrdersScreenState();
 }
 
-class _OrdersScreenState extends State<OrdersScreen> {
+class OrdersScreenState extends State<OrdersScreen> {
   final SupabaseService _supabaseService = SupabaseService();
   bool _isLoading = true;
   int _selectedFilterIndex = 0; // 0 = All, 1 = Paid, 2 = Due
@@ -23,7 +24,24 @@ class _OrdersScreenState extends State<OrdersScreen> {
   @override
   void initState() {
     super.initState();
+    RefreshSignal().addListener(_onRefreshSignal);
     _loadSalesData();
+  }
+
+  void _onRefreshSignal() {
+    if (mounted) {
+      _loadSalesData();
+    }
+  }
+
+  void refreshData() {
+    _loadSalesData();
+  }
+
+  @override
+  void dispose() {
+    RefreshSignal().removeListener(_onRefreshSignal);
+    super.dispose();
   }
 
   Future<void> _loadSalesData() async {

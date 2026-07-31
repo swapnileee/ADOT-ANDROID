@@ -5,7 +5,6 @@ import '../services/supabase_service.dart';
 import '../services/pdf_report_service.dart';
 import '../services/shop_info_service.dart';
 import '../models/sale_model.dart';
-import '../models/expense_model.dart';
 import '../models/product_model.dart';
 import '../widgets/custom_snackbar.dart';
 import '../theme/app_theme.dart';
@@ -19,7 +18,6 @@ class ReportScreen extends StatefulWidget {
 
 class _ReportScreenState extends State<ReportScreen> {
   final SupabaseService _supabaseService = SupabaseService();
-  final GlobalKey _pdfReportKey = GlobalKey();
 
   bool _isLoading = true;
   bool _isExportingPdf = false;
@@ -31,16 +29,6 @@ class _ReportScreenState extends State<ReportScreen> {
   double _totalDue = 0.0;
   int _salesCount = 0;
   int _expensesCount = 0;
-  List<SaleModel> _salesList = [];
-  List<ExpenseModel> _expensesList = [];
-
-  // Dedicated PDF Export Render State
-  String _exportPeriodTitle = 'এই মাস';
-  double _exportSalesSum = 0.0;
-  double _exportExpensesSum = 0.0;
-  double _exportCogsSum = 0.0;
-  double _exportDueSum = 0.0;
-  List<SaleModel> _exportSalesList = [];
 
   @override
   void initState() {
@@ -86,8 +74,6 @@ class _ReportScreenState extends State<ReportScreen> {
 
       if (!mounted) return;
       setState(() {
-        _salesList = sales;
-        _expensesList = expenses;
         _productsList = products;
         _totalSales = salesSum;
         _totalExpenses = expensesSum;
@@ -95,11 +81,6 @@ class _ReportScreenState extends State<ReportScreen> {
         _totalDue = dueSum;
         _salesCount = sales.length;
         _expensesCount = expenses.length;
-        _exportSalesSum = salesSum;
-        _exportExpensesSum = expensesSum;
-        _exportCogsSum = cogsSum;
-        _exportDueSum = dueSum;
-        _exportSalesList = sales;
         _isLoading = false;
       });
     } catch (e) {
@@ -218,7 +199,7 @@ class _ReportScreenState extends State<ReportScreen> {
     );
   }
 
-  Future<void> _processAndGenerateReport(String periodTitle) async {
+  Future<void> _processAndGenerateReport(String selectedFilter) async {
     if (_isExportingPdf) return;
 
     final messenger = ScaffoldMessenger.of(context);
@@ -241,7 +222,7 @@ class _ReportScreenState extends State<ReportScreen> {
             const SizedBox(width: 14),
             Expanded(
               child: Text(
-                'PDF রিপোর্ট তৈরি হচ্ছে ($periodTitle), অনুগ্রহ করে অপেক্ষা করুন...',
+                'PDF রিপোর্ট তৈরি হচ্ছে ($selectedFilter), অনুগ্রহ করে অপেক্ষা করুন...',
                 style: const TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w500),
               ),
             ),
@@ -257,58 +238,35 @@ class _ReportScreenState extends State<ReportScreen> {
 
     try {
       final now = DateTime.now();
-      List<SaleModel> filteredSales = [];
-      double filteredSalesSum = 0.0;
-      double filteredDueSum = 0.0;
-      double filteredExpensesSum = 0.0;
+      String reportTitle = 'চলতি মাস (${DateFormat('MMMM yyyy').format(now)})';
 
-      if (periodTitle == 'আজ') {
-        filteredSales = _salesList.where((s) {
-          final sDate = s.createdAt?.toLocal();
-          if (sDate == null) return false;
-          return sDate.year == now.year &&
-              sDate.month == now.month &&
-              sDate.day == now.day;
-        }).toList();
+      DateTime startDate;
+      DateTime endDate = DateTime.now();
 
-        for (var e in _expensesList) {
-          final expDate = (e.expenseDate ?? e.createdAt)?.toLocal();
-          if (expDate != null &&
-              expDate.year == now.year &&
-              expDate.month == now.month &&
-              expDate.day == now.day) {
-            filteredExpensesSum += e.amount;
-          }
-        }
-      } else if (periodTitle == 'এই সপ্তাহ') {
-        final startOfWeek = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
-        filteredSales = _salesList.where((s) {
-          final sDate = s.createdAt?.toLocal();
-          if (sDate == null) return false;
-          return sDate.isAfter(startOfWeek) || sDate.isAtSameMomentAs(startOfWeek);
-        }).toList();
-
-        for (var e in _expensesList) {
-          final expDate = (e.expenseDate ?? e.createdAt)?.toLocal();
-          if (expDate != null && (expDate.isAfter(startOfWeek) || expDate.isAtSameMomentAs(startOfWeek))) {
-            filteredExpensesSum += e.amount;
-          }
-        }
+      if (selectedFilter == 'আজ') {
+        reportTitle = 'আজ (${DateFormat('dd MMM yyyy').format(now)})';
+        startDate = DateTime(now.year, now.month, now.day, 0, 0, 0);
+      } else if (selectedFilter == 'এই সপ্তাহ') {
+        reportTitle = 'চলতি সপ্তাহ';
+        startDate = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
       } else {
         // 'এই মাস'
-        filteredSales = _salesList.where((s) {
-          final sDate = s.createdAt?.toLocal();
-          if (sDate == null) return false;
-          return sDate.year == now.year && sDate.month == now.month;
-        }).toList();
-
-        for (var e in _expensesList) {
-          final expDate = (e.expenseDate ?? e.createdAt)?.toLocal();
-          if (expDate != null && expDate.year == now.year && expDate.month == now.month) {
-            filteredExpensesSum += e.amount;
-          }
-        }
+        startDate = DateTime(now.year, now.month, 1, 0, 0, 0);
       }
+
+      final reportMetrics = await _supabaseService.fetchMonthlyReportMetrics(
+        startDate: startDate,
+        endDate: endDate,
+      );
+
+      final List<SaleModel> filteredSales = (reportMetrics['filteredSales'] as List<SaleModel>?) ?? [];
+      final double filteredSalesSum = (reportMetrics['totalSalesTurnover'] as num?)?.toDouble() ?? 0.0;
+      final double filteredExpensesSum = (reportMetrics['totalExpenses'] as num?)?.toDouble() ?? 0.0;
+      final double filteredDueSum = (reportMetrics['newDueGenerated'] as num?)?.toDouble() ?? 0.0;
+      final double totalCashCollected = (reportMetrics['totalCashCollected'] as num?)?.toDouble() ?? 0.0;
+      final double oldDueCollected = (reportMetrics['oldDueCollected'] as num?)?.toDouble() ?? 0.0;
+      final int salesCount = (reportMetrics['salesCount'] as num?)?.toInt() ?? 0;
+      final Map<String, double> expensesByCategory = (reportMetrics['expensesByCategory'] as Map<String, double>?) ?? {};
 
       double filteredCogsSum = 0.0;
       final productPrices = <String, double>{};
@@ -318,35 +276,32 @@ class _ReportScreenState extends State<ReportScreen> {
       }
 
       for (var s in filteredSales) {
-        filteredSalesSum += s.totalPrice;
-        filteredDueSum += s.dueAmount;
         final key = s.productName.trim().toLowerCase();
         final unitCost = productPrices[key] ?? (s.totalPrice * 0.70);
         filteredCogsSum += (s.quantity * unitCost);
       }
 
-      // Update Mounted Export Widget Render Data
-      setState(() {
-        _exportPeriodTitle = periodTitle;
-        _exportSalesSum = filteredSalesSum;
-        _exportExpensesSum = filteredExpensesSum;
-        _exportCogsSum = filteredCogsSum;
-        _exportDueSum = filteredDueSum;
-        _exportSalesList = filteredSales;
-      });
-
-      // Wait for frame paint completion pass
-      await WidgetsBinding.instance.endOfFrame;
-
-      // Safely capture boundary from real mounted render tree
-      final imageBytes = await PdfReportService.captureReportSafely(_pdfReportKey);
-
-      if (imageBytes != null) {
-        await PdfReportService.exportReportAsPdf(imageBytes);
-      } else {
-        if (!mounted) return;
-        CustomSnackBar.showError(context, 'PDF ইমেজ ক্যাপচার করতে ব্যর্থ হয়েছে।');
-      }
+      await PdfReportService.generateAndExportReportPdf(
+        title: ShopInfoService.shopInfoNotifier.value.name,
+        dateRange: reportTitle,
+        currentDate: DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now()),
+        totalSales: filteredSalesSum,
+        totalExpenses: filteredExpensesSum,
+        netProfit: filteredSalesSum - filteredCogsSum - filteredExpensesSum,
+        totalDue: filteredDueSum,
+        totalCashCollected: totalCashCollected,
+        oldDueCollected: oldDueCollected,
+        newDueGenerated: filteredDueSum,
+        salesCount: salesCount,
+        expensesByCategory: expensesByCategory,
+        salesList: filteredSales.map((sale) => {
+          'product_name': sale.productName,
+          'quantity': sale.displayQuantityWithUnit,
+          'customer_name': sale.customerName.isEmpty ? 'নগদ' : sale.customerName,
+          'total_price': sale.totalPrice.toStringAsFixed(0),
+          'due_amount': sale.dueAmount.toStringAsFixed(0),
+        }).toList(),
+      );
     } catch (e) {
       if (!mounted) return;
       CustomSnackBar.showError(context, 'PDF তৈরি করতে ব্যর্থ হয়েছে: $e');
@@ -375,35 +330,7 @@ class _ReportScreenState extends State<ReportScreen> {
         ],
       ),
       body: SafeArea(
-        child: Stack(
-          children: [
-            // Mounted Offscreen Printable Widget in Active Render Tree
-            Positioned(
-              left: -9999,
-              top: -9999,
-              child: RepaintBoundary(
-                key: _pdfReportKey,
-                child: PdfReportViewWidget(
-                  title: ShopInfoService.shopInfoNotifier.value.name,
-                  dateRange: _exportPeriodTitle,
-                  currentDate: DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now()),
-                  totalSales: _exportSalesSum,
-                  totalExpenses: _exportExpensesSum,
-                  netProfit: _exportSalesSum - _exportCogsSum - _exportExpensesSum,
-                  totalDue: _exportDueSum,
-                  salesList: _exportSalesList.take(25).map((sale) => {
-                    'product_name': sale.productName,
-                    'quantity': sale.displayQuantityWithUnit,
-                    'customer_name': sale.customerName.isEmpty ? 'নগদ' : sale.customerName,
-                    'total_price': sale.totalPrice.toStringAsFixed(0),
-                    'due_amount': sale.dueAmount.toStringAsFixed(0),
-                  }).toList(),
-                ),
-              ),
-            ),
-
-            // Main UI
-            _isLoading
+        child: _isLoading
                 ? const Center(
                     child: SpinKitFadingCube(
                       color: AppTheme.primaryGreen,
@@ -532,8 +459,6 @@ class _ReportScreenState extends State<ReportScreen> {
                       ],
                     ),
                   ),
-          ],
-        ),
       ),
     );
   }

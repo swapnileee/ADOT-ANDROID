@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../config/app_constants.dart';
 import '../services/supabase_service.dart';
+import '../services/refresh_signal.dart';
 import '../models/product_model.dart';
 import '../widgets/custom_snackbar.dart';
 import '../theme/app_theme.dart';
@@ -27,10 +29,10 @@ class POSScreen extends StatefulWidget {
   const POSScreen({super.key});
 
   @override
-  State<POSScreen> createState() => _POSScreenState();
+  State<POSScreen> createState() => POSScreenState();
 }
 
-class _POSScreenState extends State<POSScreen> {
+class POSScreenState extends State<POSScreen> {
   final SupabaseService _supabaseService = SupabaseService();
   final _checkoutFormKey = GlobalKey<FormState>();
 
@@ -52,16 +54,7 @@ class _POSScreenState extends State<POSScreen> {
   bool _isLoadingProducts = true;
   bool _isSubmitting = false;
 
-  final List<String> _categories = [
-    'সকল',
-    'তেল',
-    'মধু',
-    'ঘি',
-    'মসলা',
-    'চাল',
-    'ডাল',
-    'অন্যান্য',
-  ];
+  final List<String> _categories = AppConstants.defaultCategories;
 
   final List<String> _paymentMethods = [
     'নগদ',
@@ -128,6 +121,99 @@ class _POSScreenState extends State<POSScreen> {
     setState(() {
       _filteredProducts = temp;
     });
+  }
+
+  void _showPosCategoryFilterBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.creamBg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final Set<String> allCategories = {
+              'সকল',
+              ..._categories,
+              ..._products.map((p) => p.category.trim()).where((c) => c.isNotEmpty)
+            };
+
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 16.0,
+                  right: 16.0,
+                  top: 20.0,
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 16.0,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'ক্যাটাগরি ফিল্টার করুন',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.primaryGreen,
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ],
+                      ),
+                      const Divider(),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8.0,
+                        runSpacing: 8.0,
+                        children: allCategories.map((category) {
+                          final isSelected = _selectedCategoryFilter == category;
+                          return ChoiceChip(
+                            label: Text(category),
+                            selected: isSelected,
+                            selectedColor: AppTheme.primaryGreen,
+                            backgroundColor: Colors.white,
+                            labelStyle: TextStyle(
+                              color: isSelected ? Colors.white : AppTheme.textDark,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              side: BorderSide(
+                                color: isSelected ? AppTheme.primaryGreen : AppTheme.cardBorderColor,
+                              ),
+                            ),
+                            onSelected: (bool selected) {
+                              if (selected) {
+                                setState(() {
+                                  _selectedCategoryFilter = category;
+                                  _applySearch();
+                                });
+                                Navigator.pop(context);
+                              }
+                            },
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   double get _cartTotal {
@@ -286,6 +372,10 @@ class _POSScreenState extends State<POSScreen> {
     );
   }
 
+  void refreshData() {
+    _loadProducts();
+  }
+
   Future<void> _submitCheckout() async {
     if (_cartItems.isEmpty) {
       CustomSnackBar.showWarning(
@@ -328,6 +418,7 @@ class _POSScreenState extends State<POSScreen> {
       Navigator.pop(context); // Close bottom sheet if open
       _resetCartAndForm();
       _loadProducts(); // Refresh stocks
+      RefreshSignal().notifyDataChanged(); // Notify all screens (Dashboard, Orders, Inventory, Expenses)
     } on PostgrestException catch (e) {
       if (!mounted) return;
       debugPrint(
@@ -1076,19 +1167,37 @@ class _POSScreenState extends State<POSScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Search Bar
-          TextField(
-            onChanged: (val) {
-              _searchQuery = val;
-              _applySearch();
-            },
-            decoration: const InputDecoration(
-              hintText: 'পণ্যের নাম বা ক্যাটেগরি দিয়ে খুঁজুন...',
-              prefixIcon:
-                  Icon(Icons.search_rounded, color: AppTheme.primaryGreen),
-              fillColor: Colors.white,
-              filled: true,
-            ),
+          // Search Bar & Category Filter Button
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  onChanged: (val) {
+                    _searchQuery = val;
+                    _applySearch();
+                  },
+                  decoration: const InputDecoration(
+                    hintText: 'পণ্যের নাম বা ক্যাটেগরি দিয়ে খুঁজুন...',
+                    prefixIcon:
+                        Icon(Icons.search_rounded, color: AppTheme.primaryGreen),
+                    fillColor: Colors.white,
+                    filled: true,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryGreen,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.tune_rounded, color: Colors.white),
+                  onPressed: () => _showPosCategoryFilterBottomSheet(context),
+                  tooltip: 'ক্যাটাগরি ফিল্টার',
+                ),
+              ),
+            ],
           ),
 
           const SizedBox(height: 10),

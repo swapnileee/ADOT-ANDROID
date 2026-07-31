@@ -85,6 +85,19 @@ class SupabaseService {
         ProductVariant(id: 'v_503', sizeLabel: '5 kg', price: 680.0, stock: 15.0),
       ],
     ),
+    Product(
+      id: 'p_6',
+      name: 'পাবনার গাওয়া ঘি',
+      category: 'ঘি',
+      supplier: 'Pabna Organic Dairy',
+      imageUrl: 'https://images.unsplash.com/photo-1589927986089-35812388d1f4?w=400',
+      baseUnit: 'g',
+      variants: [
+        ProductVariant(id: 'v_601', sizeLabel: '250 g', price: 450.0, stock: 20.0),
+        ProductVariant(id: 'v_602', sizeLabel: '500 g', price: 850.0, stock: 15.0),
+        ProductVariant(id: 'v_603', sizeLabel: '1 kg', price: 1650.0, stock: 10.0),
+      ],
+    ),
   ];
 
   static final List<StaffModel> _localSeedStaff = [
@@ -180,6 +193,13 @@ class SupabaseService {
         final response = await client.from('products').select('*').order('name', ascending: true);
         final list = (response as List).map((json) => Product.fromJson(json)).toList();
         if (list.isNotEmpty) {
+          for (var p in list) {
+            if ((p.name.contains('গাওয়া ঘি') || p.name.contains('ঘি')) && p.category != 'ঘি') {
+              try {
+                await client.from('products').update({'category': 'ঘি'}).eq('id', p.id);
+              } catch (_) {}
+            }
+          }
           _inMemoryProducts = list;
           return list;
         }
@@ -379,6 +399,7 @@ class SupabaseService {
     String paymentMethod = 'Cash',
   }) async {
     final double calculatedDue = (totalCartPrice - paidAmount) > 0 ? (totalCartPrice - paidAmount) : 0.0;
+    final double paidRatio = totalCartPrice > 0 ? (paidAmount / totalCartPrice).clamp(0.0, 1.0) : 0.0;
 
     await syncCustomer(
       name: customerName,
@@ -391,6 +412,8 @@ class SupabaseService {
       final ProductVariant variant = item['variant'] as ProductVariant;
       final double qtyCount = (item['itemQuantity'] as num).toDouble();
       final double itemPrice = (item['totalPrice'] as num).toDouble();
+      final double itemPaid = itemPrice * paidRatio;
+      final double itemDue = itemPrice - itemPaid > 0 ? itemPrice - itemPaid : 0.0;
 
       final sale = SaleModel(
         productName: '${product.cleanName} (${variant.sizeLabel})',
@@ -401,8 +424,8 @@ class SupabaseService {
         totalPrice: itemPrice,
         customerName: customerName,
         customerPhone: customerPhone,
-        paidAmount: paidAmount > itemPrice ? itemPrice : paidAmount,
-        dueAmount: calculatedDue,
+        paidAmount: itemPaid,
+        dueAmount: itemDue,
         paymentMethod: paymentMethod,
         createdAt: DateTime.now(),
       );
@@ -631,15 +654,19 @@ class SupabaseService {
 
   // --- DIRECT DATE-BOUNDED ORDER QUERIES (avoids unfiltered list iteration) ---
 
-  /// Fetches today's sales total and order count using exact UTC-converted BD local midnight bounds.
   /// Fetches today's sales stats directly using Supabase RPC function `get_today_sales_dhaka`.
-  /// Timezone logic is handled entirely by the PostgreSQL function (Asia/Dhaka).
-  /// Empty result means 0 (no fallback to unfiltered historical queries).
+  /// Timezone logic is handled entirely by the PostgreSQL function (Asia/Dhaka) or UTC fallback.
   Future<Map<String, dynamic>> fetchTodayOrderStats() async {
     double totalSales = 0.0;
+    double paidSales = 0.0;
     int orderCount = 0;
     double totalCogs = 0.0;
     int dueCustomers = 0;
+
+    final DateTime nowBD = DateTime.now().toUtc().add(const Duration(hours: 6));
+    final DateTime startOfTodayBD = DateTime.utc(nowBD.year, nowBD.month, nowBD.day);
+    final String startOfTodayUtcStr = startOfTodayBD.subtract(const Duration(hours: 6)).toIso8601String();
+    final String nowUtcStr = DateTime.now().toUtc().toIso8601String();
 
     try {
       final client = _client;
@@ -653,12 +680,33 @@ class SupabaseService {
             if (response is List && response.isNotEmpty) {
               response = response[0];
             }
-          } catch (_) {}
+          } catch (_) {
+            // Direct query fallback for Today's Sales
+            try {
+              final directResponse = await client
+                  .from('sales')
+                  .select('total_amount, total_price, paid_amount')
+                  .gte('created_at', startOfTodayUtcStr)
+                  .lte('created_at', nowUtcStr);
+              if (directResponse.isNotEmpty) {
+                double tot = 0.0;
+                double paid = 0.0;
+                for (var row in directResponse) {
+                  tot += ((row['total_amount'] ?? row['total_price']) as num?)?.toDouble() ?? 0.0;
+                  paid += (row['paid_amount'] as num?)?.toDouble() ?? 0.0;
+                }
+                totalSales = tot;
+                paidSales = paid;
+                orderCount = directResponse.length;
+              }
+            } catch (_) {}
+          }
         }
 
         if (response != null && response is Map) {
-          totalSales = ((response['total_sales'] ?? response['today_total'] ?? response['total_amount'] ?? response['total_price']) as num?)?.toDouble() ?? 0.0;
-          orderCount = ((response['order_count'] ?? response['today_count'] ?? response['count']) as num?)?.toInt() ?? 0;
+          totalSales = ((response['total_sales'] ?? response['today_total'] ?? response['total_amount'] ?? response['total_price']) as num?)?.toDouble() ?? totalSales;
+          paidSales = ((response['paid_sales'] ?? response['total_paid'] ?? response['paid_amount'] ?? response['today_paid']) as num?)?.toDouble() ?? paidSales;
+          orderCount = ((response['order_count'] ?? response['today_count'] ?? response['count']) as num?)?.toInt() ?? orderCount;
           totalCogs = ((response['total_cogs'] ?? response['cogs'] ?? response['today_cogs']) as num?)?.toDouble() ?? 0.0;
           dueCustomers = ((response['due_customers'] ?? response['due_count']) as num?)?.toInt() ?? 0;
         }
@@ -669,6 +717,7 @@ class SupabaseService {
 
     return {
       'totalSales': totalSales,
+      'paidSales': paidSales,
       'orderCount': orderCount,
       'totalCogs': totalCogs,
       'dueCustomers': dueCustomers,
@@ -677,24 +726,36 @@ class SupabaseService {
 
   /// Fetches yesterday's sales total using exact UTC-converted BD local midnight bounds.
   Future<double> fetchYesterdayOrderTotal() async {
-    final DateTime nowLocal = DateTime.now();
-    final DateTime bdTodayStart = DateTime(nowLocal.year, nowLocal.month, nowLocal.day, 0, 0, 0);
-    final DateTime bdYesterdayStart = bdTodayStart.subtract(const Duration(days: 1));
-    final DateTime bdYesterdayEnd = DateTime(bdYesterdayStart.year, bdYesterdayStart.month, bdYesterdayStart.day, 23, 59, 59, 999);
-    final String startUtc = bdYesterdayStart.toUtc().toIso8601String();
-    final String endUtc = bdYesterdayEnd.toUtc().toIso8601String();
+    final DateTime nowBD = DateTime.now().toUtc().add(const Duration(hours: 6));
+    final DateTime startOfTodayBD = DateTime.utc(nowBD.year, nowBD.month, nowBD.day);
+    final DateTime startOfYesterdayBD = startOfTodayBD.subtract(const Duration(days: 1));
+
+    final String startOfYesterdayUtcStr = startOfYesterdayBD.subtract(const Duration(hours: 6)).toIso8601String();
+    final String startOfTodayUtcStr = startOfTodayBD.subtract(const Duration(hours: 6)).toIso8601String();
 
     double total = 0.0;
     try {
       final client = _client;
       if (client != null) {
-        final response = await client
-            .from('orders')
-            .select('total_amount')
-            .gte('created_at', startUtc)
-            .lte('created_at', endUtc);
-        for (var row in (response as List)) {
-          total += (row['total_amount'] as num?)?.toDouble() ?? 0.0;
+        dynamic response;
+        try {
+          response = await client
+              .from('sales')
+              .select('total_amount, total_price')
+              .gte('created_at', startOfYesterdayUtcStr)
+              .lt('created_at', startOfTodayUtcStr);
+        } catch (_) {
+          response = await client
+              .from('orders')
+              .select('total_amount, total_price')
+              .gte('created_at', startOfYesterdayUtcStr)
+              .lt('created_at', startOfTodayUtcStr);
+        }
+
+        if (response is List) {
+          for (var row in response) {
+            total += ((row['total_amount'] ?? row['total_price']) as num?)?.toDouble() ?? 0.0;
+          }
         }
       }
     } catch (e) {
@@ -709,9 +770,11 @@ class SupabaseService {
     final productsList = await fetchProducts();
     final salesList = await fetchSales();
     final expensesList = await fetchExpenses();
+    final dueCollectionsList = await fetchDueCollections();
 
     final now = DateTime.now();
     double todaySalesTotal = 0.0;
+    double todayPaidSalesTotal = 0.0;
     double todayCogsTotal = 0.0;
     int todayOrderCount = 0;
 
@@ -722,9 +785,20 @@ class SupabaseService {
             saleDate.month == now.month &&
             saleDate.day == now.day) {
           todaySalesTotal += sale.totalPrice;
+          todayPaidSalesTotal += sale.paidAmount;
           todayCogsTotal += (sale.totalPrice * 0.70);
           todayOrderCount++;
         }
+      }
+    }
+
+    double todayDueCollected = 0.0;
+    for (var col in dueCollectionsList) {
+      final colDate = col.createdAt.toLocal();
+      if (colDate.year == now.year &&
+          colDate.month == now.month &&
+          colDate.day == now.day) {
+        todayDueCollected += col.amount;
       }
     }
 
@@ -750,15 +824,104 @@ class SupabaseService {
     }
 
     double todayNetProfit = todaySalesTotal - todayExpensesTotal - todayCogsTotal;
+    double cashInHand = (todayPaidSalesTotal + todayDueCollected - todayExpensesTotal) > 0
+        ? (todayPaidSalesTotal + todayDueCollected - todayExpensesTotal)
+        : 0.0;
 
     return {
       'todaySales': todaySalesTotal,
+      'todayPaidSales': todayPaidSalesTotal,
+      'todayDueCollected': todayDueCollected,
+      'cashInHand': cashInHand,
       'todayExpenses': todayExpensesTotal,
       'todayNetProfit': todayNetProfit,
       'totalDue': totalDue,
       'totalProducts': productsList.length,
       'lowStockCount': lowStockCount,
       'todayOrderCount': todayOrderCount,
+    };
+  }
+
+  /// Fetches comprehensive monthly/date-bounded report statistics:
+  /// 1. Total Sales Turnover & Transaction Count
+  /// 2. Direct Sales Paid Amount & New Due Generated
+  /// 3. Old Due Collections Amount (from due_collections table)
+  /// 4. Total Cash Collected (Direct Paid Sales + Old Due Collected)
+  /// 5. Expenses Breakdown by Category (e.g., shop rent, utility bills, salary)
+  Future<Map<String, dynamic>> fetchMonthlyReportMetrics({
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    final salesList = await fetchSales();
+    final expensesList = await fetchExpenses();
+    final dueCollectionsList = await fetchDueCollections();
+
+    final DateTime startLocal = startDate.toLocal();
+    final DateTime endLocal = endDate.toLocal();
+
+    double totalSalesTurnover = 0.0;
+    double directPaidSales = 0.0;
+    double newDueGenerated = 0.0;
+    int salesCount = 0;
+
+    final List<SaleModel> filteredSales = [];
+
+    for (var sale in salesList) {
+      final saleDate = sale.createdAt?.toLocal();
+      if (saleDate != null &&
+          (saleDate.isAfter(startLocal) || saleDate.isAtSameMomentAs(startLocal)) &&
+          (saleDate.isBefore(endLocal) || saleDate.isAtSameMomentAs(endLocal))) {
+        filteredSales.add(sale);
+        totalSalesTurnover += sale.totalPrice;
+        directPaidSales += sale.paidAmount;
+        newDueGenerated += sale.dueAmount;
+        salesCount++;
+      }
+    }
+
+    double oldDueCollected = 0.0;
+    final List<DueCollectionModel> filteredDueCollections = [];
+
+    for (var col in dueCollectionsList) {
+      final colDate = col.createdAt.toLocal();
+      if ((colDate.isAfter(startLocal) || colDate.isAtSameMomentAs(startLocal)) &&
+          (colDate.isBefore(endLocal) || colDate.isAtSameMomentAs(endLocal))) {
+        filteredDueCollections.add(col);
+        oldDueCollected += col.amount;
+      }
+    }
+
+    final double totalCashCollected = directPaidSales + oldDueCollected;
+
+    double totalExpenses = 0.0;
+    final Map<String, double> expensesByCategory = {};
+    final List<ExpenseModel> filteredExpenses = [];
+
+    for (var exp in expensesList) {
+      final expDate = (exp.expenseDate ?? exp.createdAt)?.toLocal();
+      if (expDate != null &&
+          (expDate.isAfter(startLocal) || expDate.isAtSameMomentAs(startLocal)) &&
+          (expDate.isBefore(endLocal) || expDate.isAtSameMomentAs(endLocal))) {
+        filteredExpenses.add(exp);
+        totalExpenses += exp.amount;
+
+        final String categoryKey = exp.category.trim().isEmpty ? 'অন্যান্য' : exp.category.trim();
+        expensesByCategory[categoryKey] = (expensesByCategory[categoryKey] ?? 0.0) + exp.amount;
+      }
+    }
+
+    return {
+      'totalSalesTurnover': totalSalesTurnover,
+      'directPaidSales': directPaidSales,
+      'oldDueCollected': oldDueCollected,
+      'totalCashCollected': totalCashCollected,
+      'newDueGenerated': newDueGenerated,
+      'totalExpenses': totalExpenses,
+      'expensesByCategory': expensesByCategory,
+      'salesCount': salesCount,
+      'filteredSales': filteredSales,
+      'filteredExpenses': filteredExpenses,
+      'filteredDueCollections': filteredDueCollections,
     };
   }
 

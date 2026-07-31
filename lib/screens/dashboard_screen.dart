@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../services/supabase_service.dart';
 import '../services/shop_info_service.dart';
+import '../services/refresh_signal.dart';
 import '../widgets/custom_snackbar.dart';
 import '../models/sale_model.dart';
 import '../models/expense_model.dart';
@@ -34,14 +36,16 @@ class DashboardScreen extends StatefulWidget {
   static const Color textDark = Color(0xFF1F2937);
 
   @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
+  State<DashboardScreen> createState() => DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObserver {
+class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObserver {
   final SupabaseService _supabaseService = SupabaseService();
 
   bool _isLoading = true;
   double _todaySales = 0.0;
+  double _todayPaidSales = 0.0;
+  double _todayDueCollected = 0.0;
   double _todayExpenses = 0.0;
   double _todayNetProfit = 0.0;
   double _yesterdayExpenses = 0.0;
@@ -63,16 +67,48 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
   double _yesterdaySales = 0.0;
   DateTime _lastLoadedDate = DateTime.now();
 
+  // Midnight Auto-Refresh Timer State
+  Timer? _midnightTimer;
+  DateTime _lastActiveBDDate = DateTime.now().toUtc().add(const Duration(hours: 6));
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _lastLoadedDate = DateTime.now();
+    _startMidnightTimer();
+    RefreshSignal().addListener(_onRefreshSignal);
     _loadDashboardData();
+  }
+
+  void _onRefreshSignal() {
+    if (mounted) {
+      _loadDashboardData();
+    }
+  }
+
+  void refreshData() {
+    _loadDashboardData();
+  }
+
+  void _startMidnightTimer() {
+    _midnightTimer?.cancel();
+    _midnightTimer = Timer.periodic(const Duration(seconds: 60), (timer) {
+      final DateTime currentBD = DateTime.now().toUtc().add(const Duration(hours: 6));
+      final bool isSameDay = currentBD.year == _lastActiveBDDate.year &&
+                       currentBD.month == _lastActiveBDDate.month &&
+                       currentBD.day == _lastActiveBDDate.day;
+      if (!isSameDay) {
+        _lastActiveBDDate = currentBD;
+        _resetTodayState();
+        _loadDashboardData(); // Trigger fresh fetch on midnight date change!
+      }
+    });
   }
 
   @override
   void dispose() {
+    _midnightTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -92,6 +128,8 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
     if (!mounted) return;
     setState(() {
       _todaySales = 0.0;
+      _todayPaidSales = 0.0;
+      _todayDueCollected = 0.0;
       _todayOrderCount = 0;
       _todayExpenses = 0.0;
       _todayNetProfit = 0.0;
@@ -104,7 +142,7 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
   }
 
   double get _cashInHand {
-    final net = _todaySales - _todayExpenses;
+    final net = _todayPaidSales + _todayDueCollected - _todayExpenses;
     return net > 0 ? net : 0.0;
   }
 
@@ -240,33 +278,54 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
       final realTodayOrderCount = (todayStats['orderCount'] as int?) ?? 0;
       final realYesterdaySales = await _supabaseService.fetchYesterdayOrderTotal();
 
-      // 2. Fetch supporting data (expenses, products, all sales for display list)
+      // 2. Fetch supporting data (expenses, products, all sales for display list, due collections)
       final sales = await _supabaseService.fetchSales();
       final products = await _supabaseService.fetchProducts();
       final expenses = await _supabaseService.fetchExpenses();
+      final dueCollections = await _supabaseService.fetchDueCollections();
 
       int outCount = 0;
       for (var p in products) {
         if (p.totalStock <= 0) outCount++;
       }
 
-      final now = DateTime.now();
-      final bdTodayStart = DateTime(now.year, now.month, now.day, 0, 0, 0);
-      final bdTodayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59, 999);
-      final bdYesterdayStart = bdTodayStart.subtract(const Duration(days: 1));
-      final bdYesterdayEnd = DateTime(bdYesterdayStart.year, bdYesterdayStart.month, bdYesterdayStart.day, 23, 59, 59, 999);
+      // Calculate BD Reference Dates (device-independent UTC construct with +6h offset)
+      final DateTime nowBD = DateTime.now().toUtc().add(const Duration(hours: 6));
+      final DateTime startOfTodayBD = DateTime.utc(nowBD.year, nowBD.month, nowBD.day);
+      final DateTime startOfYesterdayBD = startOfTodayBD.subtract(const Duration(days: 1));
 
-      // Compute expenses (still from cached list; column is expense_date not created_at)
+      // Direct sales paid amount today from sales list
+      double computedTodayPaidSales = 0.0;
+      for (var sale in sales) {
+        if (sale.createdAt != null) {
+          final saleDateBD = sale.createdAt!.toUtc().add(const Duration(hours: 6));
+          if (!saleDateBD.isBefore(startOfTodayBD)) {
+            computedTodayPaidSales += sale.paidAmount;
+          }
+        }
+      }
+
+      // Due collections / repayments collected today
+      double computedTodayDueCollected = 0.0;
+      for (var col in dueCollections) {
+        final colDateBD = col.createdAt.toUtc().add(const Duration(hours: 6));
+        if (!colDateBD.isBefore(startOfTodayBD)) {
+          computedTodayDueCollected += col.amount;
+        }
+      }
+
+      // Compute expenses
       double computedTodayExpenses = 0.0;
       double computedYesterdayExpenses = 0.0;
       double computedTotalDue = 0.0;
 
       for (var exp in expenses) {
-        final expDate = (exp.expenseDate ?? exp.createdAt)?.toLocal();
+        final expDate = (exp.expenseDate ?? exp.createdAt);
         if (expDate != null) {
-          if (!expDate.isBefore(bdTodayStart) && !expDate.isAfter(bdTodayEnd)) {
+          final expDateBD = expDate.toUtc().add(const Duration(hours: 6));
+          if (!expDateBD.isBefore(startOfTodayBD)) {
             computedTodayExpenses += exp.amount;
-          } else if (!expDate.isBefore(bdYesterdayStart) && !expDate.isAfter(bdYesterdayEnd)) {
+          } else if (!expDateBD.isBefore(startOfYesterdayBD) && expDateBD.isBefore(startOfTodayBD)) {
             computedYesterdayExpenses += exp.amount;
           }
         }
@@ -288,16 +347,16 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
 
       for (var sale in sales) {
         if (sale.createdAt != null) {
-          final saleDate = sale.createdAt!.toLocal();
+          final saleDateBD = sale.createdAt!.toUtc().add(const Duration(hours: 6));
           final key = sale.productName.trim().toLowerCase();
           final unitCost = productBuyingPrices[key] ?? (sale.totalPrice * 0.70);
           final saleCogs = sale.quantity * unitCost;
 
-          if (!saleDate.isBefore(bdTodayStart) && !saleDate.isAfter(bdTodayEnd)) {
+          if (!saleDateBD.isBefore(startOfTodayBD)) {
             if (computedTodayCogs == 0.0) {
               computedTodayCogs += saleCogs;
             }
-          } else if (!saleDate.isBefore(bdYesterdayStart) && !saleDate.isAfter(bdYesterdayEnd)) {
+          } else if (!saleDateBD.isBefore(startOfYesterdayBD) && saleDateBD.isBefore(startOfTodayBD)) {
             computedYesterdayCogs += saleCogs;
           }
         }
@@ -309,11 +368,15 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
 
       final netProfitToday = finalTodaySales - computedTodayCogs - computedTodayExpenses;
       final netProfitYesterday = realYesterdaySales - computedYesterdayCogs - computedYesterdayExpenses;
-      final updatedTimeText = DateFormat('hh:mm a').format(now);
+      final updatedTimeText = DateFormat('hh:mm a').format(nowBD);
 
       if (!mounted) return;
       setState(() {
         _todaySales = finalTodaySales;
+        _todayPaidSales = (todayStats['paidSales'] as double? ?? 0.0) > 0
+            ? (todayStats['paidSales'] as double)
+            : computedTodayPaidSales;
+        _todayDueCollected = computedTodayDueCollected;
         _todayExpenses = computedTodayExpenses;
         _todayNetProfit = netProfitToday;
         _yesterdayExpenses = computedYesterdayExpenses;
@@ -770,7 +833,7 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
     );
   }
 
-  // 3. MAIN METRICS (GREEN CARD WITH INTERACTIVE FILTER)
+  // 3. MAIN METRICS (GREEN CARD WITH INTERACTIVE FILTER & BACKGROUND ILLUSTRATION)
   Widget _buildMainMetricsCards() {
     final double previous = _displayedPreviousSalesAmount;
     final double current = _displayedSalesAmount;
@@ -780,81 +843,107 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
     final Color accentColor = isPositive ? Colors.greenAccent : Colors.orangeAccent;
     final IconData arrowIcon = isPositive ? Icons.arrow_upward : Icons.arrow_downward;
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: DashboardScreen.cardGreen,
-        borderRadius: BorderRadius.circular(22),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 12, offset: const Offset(0, 4))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '$_selectedSalesFilter-এর বিক্রি',
-                style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500),
+    const double cardRadius = 22.0;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(cardRadius),
+      child: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: DashboardScreen.cardGreen,
+          borderRadius: BorderRadius.circular(cardRadius),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 12, offset: const Offset(0, 4))],
+        ),
+        child: Stack(
+          children: [
+            // Background Shop Illustration
+            Positioned(
+              right: 10,
+              bottom: 0,
+              child: Image.asset(
+                'assets/images/shop_illustration.png',
+                height: 148,
+                fit: BoxFit.contain,
               ),
-              PopupMenuButton<String>(
-                onSelected: (value) {
-                  setState(() {
-                    _selectedSalesFilter = value;
-                  });
-                },
-                color: DashboardScreen.cardGreen,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                itemBuilder: (context) => const [
-                  PopupMenuItem(value: 'আজ', child: Text('আজ', style: TextStyle(color: Colors.white, fontSize: 13))),
-                  PopupMenuItem(value: 'এই সপ্তাহ', child: Text('এই সপ্তাহ', style: TextStyle(color: Colors.white, fontSize: 13))),
-                  PopupMenuItem(value: 'এই মাস', child: Text('এই মাস', style: TextStyle(color: Colors.white, fontSize: 13))),
-                  PopupMenuItem(value: 'এই বছর', child: Text('এই বছর', style: TextStyle(color: Colors.white, fontSize: 13))),
-                ],
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(10)),
-                  child: Row(
+            ),
+
+            // Foreground Text & Controls
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('$_selectedSalesFilter ▼', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                      Text(
+                        '$_selectedSalesFilter-এর বিক্রি',
+                        style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500),
+                      ),
+                      PopupMenuButton<String>(
+                        onSelected: (value) {
+                          setState(() {
+                            _selectedSalesFilter = value;
+                          });
+                        },
+                        color: DashboardScreen.cardGreen,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(value: 'আজ', child: Text('আজ', style: TextStyle(color: Colors.white, fontSize: 13))),
+                          PopupMenuItem(value: 'এই সপ্তাহ', child: Text('এই সপ্তাহ', style: TextStyle(color: Colors.white, fontSize: 13))),
+                          PopupMenuItem(value: 'এই মাস', child: Text('এই মাস', style: TextStyle(color: Colors.white, fontSize: 13))),
+                          PopupMenuItem(value: 'এই বছর', child: Text('এই বছর', style: TextStyle(color: Colors.white, fontSize: 13))),
+                        ],
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(10)),
+                          child: Row(
+                            children: [
+                              Text('$_selectedSalesFilter ▼', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                      ),
                     ],
                   ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text('৳ ${current.toStringAsFixed(0)}', style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: (hasPrevData || current > 0) ? accentColor.withValues(alpha: 0.2) : Colors.white12,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Row(
-                  children: [
-                    if (hasPrevData || current > 0) ...[
-                      Icon(arrowIcon, color: accentColor, size: 12),
-                      const SizedBox(width: 2),
-                      Text('${isPositive && growth > 0 ? "+" : ""}${growth.abs().toStringAsFixed(0)}%', style: TextStyle(color: accentColor, fontSize: 11, fontWeight: FontWeight.bold)),
-                    ] else ...[
-                      const Text('0%', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 8),
+                  Text('৳ ${current.toStringAsFixed(0)}', style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: (hasPrevData || current > 0) ? accentColor.withValues(alpha: 0.2) : Colors.white12,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          children: [
+                            if (hasPrevData || current > 0) ...[
+                              Icon(arrowIcon, color: accentColor, size: 12),
+                              const SizedBox(width: 2),
+                              Text('${isPositive && growth > 0 ? "+" : ""}${growth.abs().toStringAsFixed(0)}%', style: TextStyle(color: accentColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                            ] else ...[
+                              const Text('0%', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500)),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(_displayedComparisonText, style: const TextStyle(color: Colors.white60, fontSize: 11)),
                     ],
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 10),
+                  const SizedBox(
+                    width: 165,
+                    child: Divider(color: Colors.white12),
+                  ),
+                  Text(_displayedPreviousAmountText, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                ],
               ),
-              const SizedBox(width: 6),
-              Text(_displayedComparisonText, style: const TextStyle(color: Colors.white60, fontSize: 11)),
-            ],
-          ),
-          const SizedBox(height: 10),
-          const Divider(color: Colors.white12),
-          Text(_displayedPreviousAmountText, style: const TextStyle(color: Colors.white54, fontSize: 11)),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }

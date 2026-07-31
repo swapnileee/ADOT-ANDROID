@@ -629,46 +629,56 @@ class _DuesScreenState extends State<DuesScreen> {
   void _showSortFilterBottomSheet() {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'বকেয়া ফিল্টার ও সর্টিং',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: primaryDarkGreen),
-              ),
-              const SizedBox(height: 16),
-              ...[
-                'সর্বশেষ যোগ',
-                'বেশি বকেয়া আগে',
-                'পুরনো বকেয়া আগে',
-                'নাম (A-Z)',
-              ].map((sortOption) {
-                final isSel = _selectedSort == sortOption;
-                return ListTile(
-                  title: Text(
-                    sortOption,
-                    style: TextStyle(
-                      fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
-                      color: isSel ? primaryDarkGreen : textDark,
-                    ),
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 20.0,
+              right: 20.0,
+              top: 20.0,
+              bottom: MediaQuery.of(context).viewInsets.bottom + 16.0,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'বকেয়া ফিল্টার ও সর্টিং',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: primaryDarkGreen),
                   ),
-                  trailing: isSel ? const Icon(Icons.check_circle_rounded, color: primaryDarkGreen) : null,
-                  onTap: () {
-                    setState(() {
-                      _selectedSort = sortOption;
-                    });
-                    Navigator.pop(context);
-                  },
-                );
-              }),
-            ],
+                  const SizedBox(height: 16),
+                  ...[
+                    'সর্বশেষ যোগ',
+                    'বেশি বকেয়া আগে',
+                    'পুরনো বকেয়া আগে',
+                    'নাম (A-Z)',
+                  ].map((sortOption) {
+                    final isSel = _selectedSort == sortOption;
+                    return ListTile(
+                      title: Text(
+                        sortOption,
+                        style: TextStyle(
+                          fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                          color: isSel ? primaryDarkGreen : textDark,
+                        ),
+                      ),
+                      trailing: isSel ? const Icon(Icons.check_circle_rounded, color: primaryDarkGreen) : null,
+                      onTap: () {
+                        setState(() {
+                          _selectedSort = sortOption;
+                        });
+                        Navigator.pop(context);
+                      },
+                    );
+                  }),
+                ],
+              ),
+            ),
           ),
         );
       },

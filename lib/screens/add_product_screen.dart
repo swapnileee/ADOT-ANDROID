@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
+import '../config/app_constants.dart';
 import '../models/product_model.dart';
 import '../services/supabase_service.dart';
 import '../widgets/custom_snackbar.dart';
@@ -28,22 +29,18 @@ class _AddProductScreenState extends State<AddProductScreen> {
   late TextEditingController _imageUrlController;
   late TextEditingController _minStockController;
 
-  String _selectedCategory = 'সাধারণ';
+  String _selectedCategory = 'নিত্যপণ্য';
   String _selectedBaseUnit = 'Pcs';
   bool _isSubmitting = false;
 
-  final List<String> _categories = [
-    'সাধারণ',
-    'নিত্যপণ্য',
-    'তেল',
-    'চাল',
-    'ডাল',
-    'মধু',
-    'ডিম',
-    'দুধ',
-    'ফল',
-    'প্রসাধনী',
-  ];
+  List<String> get _categories {
+    final list = List<String>.from(AppConstants.productDropdownCategories);
+    final pCat = widget.productToEdit?.category;
+    if (pCat != null && pCat.isNotEmpty && !list.contains(pCat)) {
+      list.insert(0, pCat);
+    }
+    return list;
+  }
 
   final List<String> _baseUnits = ['Pcs', 'Kg', 'gm', 'Liter', 'ml', 'Pack'];
 
