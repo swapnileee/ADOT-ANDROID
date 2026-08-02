@@ -14,12 +14,15 @@ class OrdersScreen extends StatefulWidget {
   State<OrdersScreen> createState() => OrdersScreenState();
 }
 
-class OrdersScreenState extends State<OrdersScreen> {
+class OrdersScreenState extends State<OrdersScreen> with AutomaticKeepAliveClientMixin {
   final SupabaseService _supabaseService = SupabaseService();
   bool _isLoading = true;
   int _selectedFilterIndex = 0; // 0 = All, 1 = Paid, 2 = Due
 
   List<SaleModel> _allSales = [];
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -45,7 +48,9 @@ class OrdersScreenState extends State<OrdersScreen> {
   }
 
   Future<void> _loadSalesData() async {
-    setState(() => _isLoading = true);
+    if (_allSales.isEmpty) {
+      setState(() => _isLoading = true);
+    }
     try {
       final sales = await _supabaseService.fetchSales();
       if (!mounted) return;
@@ -71,6 +76,7 @@ class OrdersScreenState extends State<OrdersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final filteredList = _filteredSales;
 
     return Scaffold(

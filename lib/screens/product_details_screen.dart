@@ -188,12 +188,27 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                       color: AppTheme.primaryGreen,
                     ),
                   ),
-                  TextButton.icon(
-                    onPressed: _navigateToEdit,
-                    icon: const Icon(Icons.add_circle_outline_rounded, size: 18, color: AppTheme.primaryGreen),
-                    label: const Text(
-                      '+ ভ্যারিয়েন্ট যোগ করুন',
-                      style: TextStyle(color: AppTheme.primaryGreen, fontWeight: FontWeight.bold, fontSize: 13),
+                  InkWell(
+                    onTap: _navigateToEdit,
+                    borderRadius: BorderRadius.circular(8),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Icon(Icons.add_circle_outline_rounded, size: 16, color: AppTheme.primaryGreen),
+                          SizedBox(width: 4),
+                          Text(
+                            'ভ্যারিয়েন্ট যোগ করুন',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.primaryGreen,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],

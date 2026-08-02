@@ -4,6 +4,7 @@ import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/shop_info_service.dart';
 import '../services/supabase_service.dart';
+import '../services/refresh_signal.dart';
 import '../models/sale_model.dart';
 import '../models/due_collection_model.dart';
 import '../widgets/custom_snackbar.dart';
@@ -17,7 +18,7 @@ class DuesScreen extends StatefulWidget {
   State<DuesScreen> createState() => _DuesScreenState();
 }
 
-class _DuesScreenState extends State<DuesScreen> {
+class _DuesScreenState extends State<DuesScreen> with AutomaticKeepAliveClientMixin {
   static const Color primaryDarkGreen = Color(0xFF1E4D3B);
   static const Color bgLightGray = Color(0xFFF8F9FA);
   static const Color cardBorderColor = Color(0xFFE5E7EB);
@@ -40,9 +41,19 @@ class _DuesScreenState extends State<DuesScreen> {
   String _selectedSort = 'সর্বশেষ যোগ'; // 'বেশি বকেয়া আগে', 'পুরনো বকেয়া আগে', 'নাম (A-Z)', 'সর্বশেষ যোগ'
 
   @override
+  bool get wantKeepAlive => true;
+
+  @override
   void initState() {
     super.initState();
-    _loadDuesData();
+    final cachedS = _supabaseService.cachedSales;
+    final cachedC = _supabaseService.cachedDueCollections;
+
+    if (cachedS.isNotEmpty || cachedC.isNotEmpty) {
+      _calculateDuesFromData(cachedS, cachedC);
+    } else {
+      _loadDuesData();
+    }
   }
 
   @override
@@ -51,54 +62,59 @@ class _DuesScreenState extends State<DuesScreen> {
     super.dispose();
   }
 
-  Future<void> _loadDuesData() async {
+  void _calculateDuesFromData(List<SaleModel> sales, List<DueCollectionModel> dueCollections) {
+    double dueSum = 0.0;
+    double todayDueSum = 0.0;
+    double monthCollectedSum = 0.0;
+    int todayCount = 0;
+
+    final now = DateTime.now();
+    final List<SaleModel> dues = [];
+
+    for (var s in sales) {
+      if (s.dueAmount > 0) {
+        dues.add(s);
+        dueSum += s.dueAmount;
+
+        final dt = s.createdAt?.toLocal() ?? now;
+        final daysOld = now.difference(dt).inDays;
+        if (daysOld >= 7) {
+          todayDueSum += s.dueAmount;
+          todayCount++;
+        }
+      }
+    }
+
+    final List<DueCollectionModel> monthCollections = [];
+    for (var c in dueCollections) {
+      final dt = c.createdAt.toLocal();
+      if (dt.year == now.year && dt.month == now.month) {
+        monthCollectedSum += c.amount;
+        monthCollections.add(c);
+      }
+    }
+
+    _allDueSales = dues;
+    _monthDueCollectionsList = monthCollections;
+    _totalDue = dueSum;
+    _todayDue = todayDueSum;
+    _todayDueCount = todayCount;
+    _collectedThisMonth = monthCollectedSum;
+    _isLoading = false;
+  }
+
+  Future<void> _loadDuesData({bool showLoading = false}) async {
     FocusManager.instance.primaryFocus?.unfocus();
-    setState(() => _isLoading = true);
+    if (showLoading || (_allDueSales.isEmpty && _monthDueCollectionsList.isEmpty)) {
+      setState(() => _isLoading = true);
+    }
     try {
       final sales = await _supabaseService.fetchSales();
-      double dueSum = 0.0;
-      double todayDueSum = 0.0;
-      double monthCollectedSum = 0.0;
-      int todayCount = 0;
-
-      final now = DateTime.now();
-      final List<SaleModel> dues = [];
-
-      for (var s in sales) {
-        if (s.dueAmount > 0) {
-          dues.add(s);
-          dueSum += s.dueAmount;
-
-          // Calculate dues older than or equal to 7 days (Age >= 7 days)
-          final dt = s.createdAt?.toLocal() ?? now;
-          final daysOld = now.difference(dt).inDays;
-          if (daysOld >= 7) {
-            todayDueSum += s.dueAmount;
-            todayCount++;
-          }
-        }
-      }
-
-      // Collected this month strictly from Due Collections / Repayments
       final dueCollections = await _supabaseService.fetchDueCollections();
-      final List<DueCollectionModel> monthCollections = [];
-      for (var c in dueCollections) {
-        final dt = c.createdAt.toLocal();
-        if (dt.year == now.year && dt.month == now.month) {
-          monthCollectedSum += c.amount;
-          monthCollections.add(c);
-        }
-      }
 
       if (!mounted) return;
       setState(() {
-        _allDueSales = dues;
-        _monthDueCollectionsList = monthCollections;
-        _totalDue = dueSum;
-        _todayDue = todayDueSum;
-        _todayDueCount = todayCount;
-        _collectedThisMonth = monthCollectedSum;
-        _isLoading = false;
+        _calculateDuesFromData(sales, dueCollections);
       });
     } catch (e) {
       if (!mounted) return;
@@ -410,6 +426,7 @@ class _DuesScreenState extends State<DuesScreen> {
                             if (mounted) {
                               CustomSnackBar.showSuccess(context, 'বকেয়া হিসাব সফলভাবে আপডেট হয়েছে!');
                               _loadDuesData();
+                              RefreshSignal().notifyDataChanged();
                             }
                           } catch (e) {
                             if (mounted) CustomSnackBar.showError(context, 'বকেয়া আপডেট করতে সমস্যা: $e');
@@ -597,6 +614,7 @@ class _DuesScreenState extends State<DuesScreen> {
                                     if (mounted) {
                                       CustomSnackBar.showSuccess(context, 'নতুন বকেয়া সফলভাবে যুক্ত হয়েছে!');
                                       _loadDuesData();
+                                      RefreshSignal().notifyDataChanged();
                                     }
                                   } catch (e) {
                                     if (mounted) CustomSnackBar.showError(context, 'বকেয়া যুক্ত করতে সমস্যা: $e');
@@ -687,6 +705,7 @@ class _DuesScreenState extends State<DuesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final displayList = _filteredAndSortedList;
 
     return Scaffold(

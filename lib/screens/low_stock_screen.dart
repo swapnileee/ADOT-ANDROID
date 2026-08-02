@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../services/supabase_service.dart';
+import '../services/refresh_signal.dart';
 import '../services/unit_conversion_service.dart';
 import '../models/product_model.dart';
 import '../widgets/custom_snackbar.dart';
@@ -83,6 +84,7 @@ class _LowStockScreenState extends State<LowStockScreen> {
                   if (!context.mounted) return;
                   CustomSnackBar.showSuccess(context, 'স্টক সফলভাবে আপডেট হয়েছে!');
                   _loadLowStockProducts();
+                  RefreshSignal().notifyDataChanged();
                 } catch (e) {
                   if (!context.mounted) return;
                   CustomSnackBar.showError(context, 'স্টক আপডেট ব্যর্থ: $e');

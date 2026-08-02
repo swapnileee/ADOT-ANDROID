@@ -39,7 +39,7 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => DashboardScreenState();
 }
 
-class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObserver {
+class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObserver, AutomaticKeepAliveClientMixin {
   final SupabaseService _supabaseService = SupabaseService();
 
   bool _isLoading = true;
@@ -56,6 +56,7 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
   int _lowStockCount = 0;
   int _outOfStockCount = 0;
   int _todayOrderCount = 0;
+  int _unpaidStaffCount = 0;
   final List<SaleModel> _recentSales = [];
   List<SaleModel> _allSales = [];
 
@@ -263,6 +264,9 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
     }
   }
 
+  @override
+  bool get wantKeepAlive => true;
+
   Future<void> _loadDashboardData() async {
     final nowCheck = DateTime.now();
     if (nowCheck.day != _lastLoadedDate.day || nowCheck.month != _lastLoadedDate.month || nowCheck.year != _lastLoadedDate.year) {
@@ -270,7 +274,9 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
     }
     _lastLoadedDate = nowCheck;
 
-    setState(() => _isLoading = true);
+    if (_recentSales.isEmpty && _allSales.isEmpty) {
+      setState(() => _isLoading = true);
+    }
     try {
       // 1. Direct date-bounded Supabase queries for BD local midnight boundaries
       final todayStats = await _supabaseService.fetchTodayOrderStats();
@@ -278,11 +284,44 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
       final realTodayOrderCount = (todayStats['orderCount'] as int?) ?? 0;
       final realYesterdaySales = await _supabaseService.fetchYesterdayOrderTotal();
 
-      // 2. Fetch supporting data (expenses, products, all sales for display list, due collections)
+      // 2. Fetch supporting data (expenses, products, all sales for display list, due collections, staff, salary payments)
       final sales = await _supabaseService.fetchSales();
       final products = await _supabaseService.fetchProducts();
       final expenses = await _supabaseService.fetchExpenses();
       final dueCollections = await _supabaseService.fetchDueCollections();
+      final staffList = await _supabaseService.fetchStaff();
+      final salaryPayments = await _supabaseService.fetchSalaryPayments();
+
+      int unpaidStaffCalcCount = 0;
+      final nowStaff = DateTime.now();
+      for (var staff in staffList) {
+        if (!staff.isActive) continue;
+
+        if (staff.joinDate.year > nowStaff.year ||
+            (staff.joinDate.year == nowStaff.year && staff.joinDate.month >= nowStaff.month)) {
+          continue;
+        }
+
+        bool hasUnpaid = false;
+        DateTime current = DateTime(staff.joinDate.year, staff.joinDate.month, 1);
+        final DateTime limit = DateTime(nowStaff.year, nowStaff.month, 1);
+
+        while (!current.isAfter(limit)) {
+          final monthStr = DateFormat('MMMM yyyy').format(current);
+          final isPaid = salaryPayments.any((p) =>
+              p.staffId.toString() == staff.id.toString() &&
+              p.monthYear.trim().toLowerCase() == monthStr.trim().toLowerCase());
+          if (!isPaid) {
+            hasUnpaid = true;
+            break;
+          }
+          current = DateTime(current.year, current.month + 1, 1);
+        }
+
+        if (hasUnpaid) {
+          unpaidStaffCalcCount++;
+        }
+      }
 
       int outCount = 0;
       for (var p in products) {
@@ -387,6 +426,7 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
         _lowStockCount = products.where((p) => p.isLowStock).length;
         _todayOrderCount = finalTodayOrderCount;
         _outOfStockCount = outCount;
+        _unpaidStaffCount = unpaidStaffCalcCount;
         _allSales = sales;
         _recentSales.clear();
         _recentSales.addAll(sales.take(5));
@@ -509,6 +549,7 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
                                   CustomSnackBar.showSuccess(context, 'খরচ সফলভাবে সংরক্ষিত হয়েছে!');
                                   Navigator.pop(context);
                                   _loadDashboardData();
+                                  RefreshSignal().notifyDataChanged();
                                 } catch (e) {
                                   if (!context.mounted) return;
                                   CustomSnackBar.showError(context, 'খরচ যোগ করতে ত্রুটি: $e');
@@ -615,6 +656,7 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       backgroundColor: DashboardScreen.bgGray,
       body: RefreshIndicator(
@@ -748,7 +790,13 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const UniversalSearchScreen()),
+                MaterialPageRoute(
+                  builder: (context) => UniversalSearchScreen(
+                    initialProducts: _supabaseService.cachedProducts,
+                    initialSales: _allSales,
+                    initialExpenses: _supabaseService.cachedExpenses,
+                  ),
+                ),
               );
             },
             tooltip: 'খুঁজুন',
@@ -1117,9 +1165,11 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
           const Divider(height: 16),
           _buildAlertItem(
             'কর্মচারী বেতন',
-            '১ জনের বেতন বকেয়া আছে',
+            _unpaidStaffCount > 0
+                ? '$_unpaidStaffCount জনের বেতন বকেয়া আছে'
+                : 'সকল কর্মচারীর বেতন পরিশোধিত',
             'বেতন দিন',
-            Colors.orange,
+            _unpaidStaffCount > 0 ? Colors.orange : Colors.green,
             () {
               Navigator.push(
                 context,

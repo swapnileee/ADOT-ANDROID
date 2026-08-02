@@ -24,16 +24,24 @@ class StaffModel {
   bool get isActive => status.toLowerCase() == 'active';
 
   factory StaffModel.fromJson(Map<String, dynamic> json) {
+    DateTime parsedJoinDate;
+    final rawJoin = json['joining_date'] ??
+        json['join_date'] ??
+        json['joinDate'] ??
+        json['created_at'] ??
+        json['createdAt'];
+    if (rawJoin != null && rawJoin.toString().trim().isNotEmpty) {
+      parsedJoinDate = DateTime.tryParse(rawJoin.toString())?.toLocal() ?? DateTime.now();
+    } else {
+      parsedJoinDate = DateTime.now();
+    }
+
     return StaffModel(
       id: json['id'],
       name: json['name']?.toString() ?? '',
       designation: json['designation']?.toString() ?? json['role']?.toString() ?? 'Salesman',
       phone: json['phone']?.toString() ?? '',
-      joinDate: json['join_date'] != null
-          ? DateTime.tryParse(json['join_date'].toString()) ?? DateTime.now()
-          : (json['joinDate'] != null
-              ? DateTime.tryParse(json['joinDate'].toString()) ?? DateTime.now()
-              : DateTime.now()),
+      joinDate: parsedJoinDate,
       monthlySalary: (json['monthly_salary'] as num?)?.toDouble() ??
           (json['monthlySalary'] as num?)?.toDouble() ??
           (json['base_salary'] as num?)?.toDouble() ??
@@ -49,11 +57,14 @@ class StaffModel {
   }
 
   Map<String, dynamic> toJson() {
+    final formattedDate =
+        '${joinDate.year.toString().padLeft(4, '0')}-${joinDate.month.toString().padLeft(2, '0')}-${joinDate.day.toString().padLeft(2, '0')}';
     final Map<String, dynamic> data = {
       'name': name,
       'designation': designation,
       'role': designation,
       'phone': phone,
+      'joining_date': formattedDate,
       'join_date': joinDate.toUtc().toIso8601String(),
       'monthly_salary': monthlySalary,
       'base_salary': monthlySalary,
@@ -68,11 +79,15 @@ class StaffModel {
   }
 
   Map<String, dynamic> toEmployeeJson() {
+    final formattedDate =
+        '${joinDate.year.toString().padLeft(4, '0')}-${joinDate.month.toString().padLeft(2, '0')}-${joinDate.day.toString().padLeft(2, '0')}';
     final Map<String, dynamic> data = {
       'name': name,
       'phone': phone,
       'designation': designation,
       'role': designation,
+      'joining_date': formattedDate,
+      'join_date': joinDate.toUtc().toIso8601String(),
       'base_salary': monthlySalary,
       'pending_salary': pendingSalary > 0 ? pendingSalary : monthlySalary,
       'created_at': (createdAt ?? DateTime.now()).toUtc().toIso8601String(),

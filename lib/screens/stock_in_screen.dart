@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../models/product_model.dart';
 import '../models/purchase_model.dart';
 import '../services/supabase_service.dart';
+import '../services/refresh_signal.dart';
 import '../theme/app_theme.dart';
 import '../widgets/custom_snackbar.dart';
 
@@ -14,7 +15,7 @@ class StockInScreen extends StatefulWidget {
   State<StockInScreen> createState() => _StockInScreenState();
 }
 
-class _StockInScreenState extends State<StockInScreen> {
+class _StockInScreenState extends State<StockInScreen> with AutomaticKeepAliveClientMixin {
   final SupabaseService _supabaseService = SupabaseService();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
@@ -44,6 +45,9 @@ class _StockInScreenState extends State<StockInScreen> {
   bool _isLoading = true;
   bool _isSubmitting = false;
 
+  @override
+  bool get wantKeepAlive => true;
+
   final List<String> _categoryOptions = [
     'নিত্যপণ্য',
     'তেল',
@@ -60,7 +64,20 @@ class _StockInScreenState extends State<StockInScreen> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    final cachedProducts = _supabaseService.cachedProducts;
+    final cachedPurchases = _supabaseService.cachedPurchases;
+
+    if (cachedProducts.isNotEmpty || cachedPurchases.isNotEmpty) {
+      _products = List.from(cachedProducts);
+      _purchases = List.from(cachedPurchases);
+      _isLoading = false;
+      if (_products.isNotEmpty) {
+        _onSelectProduct(_products.first);
+      }
+    } else {
+      _loadData();
+    }
+
     _qtyController.addListener(_updateTotalCostPreview);
     _priceController.addListener(_updateTotalCostPreview);
   }
@@ -82,8 +99,10 @@ class _StockInScreenState extends State<StockInScreen> {
     setState(() {});
   }
 
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadData({bool showLoading = false}) async {
+    if (showLoading || (_products.isEmpty && _purchases.isEmpty)) {
+      setState(() => _isLoading = true);
+    }
     try {
       final products = await _supabaseService.fetchProducts();
       final purchases = await _supabaseService.fetchPurchases();
@@ -336,6 +355,7 @@ class _StockInScreenState extends State<StockInScreen> {
         _notesController.clear();
         _isNewProductMode = false;
         _loadData();
+        RefreshSignal().notifyDataChanged();
       } catch (e) {
         if (!mounted) return;
         CustomSnackBar.showError(
@@ -382,6 +402,7 @@ class _StockInScreenState extends State<StockInScreen> {
         _qtyController.clear();
         _notesController.clear();
         _loadData();
+        RefreshSignal().notifyDataChanged();
       } catch (e) {
         if (!mounted) return;
         CustomSnackBar.showError(context, 'স্টক ইন করতে সমস্যা হয়েছে: $e');
@@ -412,6 +433,7 @@ class _StockInScreenState extends State<StockInScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return DefaultTabController(
       length: 2,
       child: Scaffold(

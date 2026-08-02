@@ -100,33 +100,20 @@ class SupabaseService {
     ),
   ];
 
-  static final List<StaffModel> _localSeedStaff = [
-    StaffModel(
-      id: 'st_1',
-      name: 'করিম হোসেন',
-      designation: 'ম্যানেজার ও সেলসম্যান',
-      phone: '01711223344',
-      joinDate: DateTime(2025, 1, 1),
-      monthlySalary: 18000.0,
-      status: 'active',
-    ),
-    StaffModel(
-      id: 'st_2',
-      name: 'রাফি ইসলাম',
-      designation: 'সহকারী বিক্রয়কর্মী',
-      phone: '01899887766',
-      joinDate: DateTime(2025, 6, 15),
-      monthlySalary: 12000.0,
-      status: 'active',
-    ),
-  ];
-
   static List<Product> _inMemoryProducts = List.from(_localSeedProducts);
-  static final List<SaleModel> _inMemorySales = [];
-  static final List<ExpenseModel> _inMemoryExpenses = [];
+  static List<SaleModel> _inMemorySales = [];
+  static List<ExpenseModel> _inMemoryExpenses = [];
   static final List<PurchaseModel> _inMemoryPurchases = [];
-  static List<StaffModel> _inMemoryStaff = List.from(_localSeedStaff);
+  static List<StaffModel> _inMemoryStaff = [];
   static final List<SalaryPaymentModel> _inMemorySalaryPayments = [];
+
+  List<Product> get cachedProducts => _inMemoryProducts;
+  List<SaleModel> get cachedSales => _inMemorySales;
+  List<ExpenseModel> get cachedExpenses => _inMemoryExpenses;
+  List<PurchaseModel> get cachedPurchases => _inMemoryPurchases;
+  List<StaffModel> get cachedStaff => _inMemoryStaff;
+  List<SalaryPaymentModel> get cachedSalaryPayments => _inMemorySalaryPayments;
+  List<DueCollectionModel> get cachedDueCollections => _inMemoryDueCollections;
 
   // --- CUSTOMER SYNC ---
   Future<void> syncCustomer({
@@ -359,12 +346,17 @@ class SupabaseService {
     try {
       final client = _client;
       if (client != null) {
+        List<SaleModel> list;
         try {
           final response = await client.from('sales').select('*').order('created_at', ascending: false);
-          return (response as List).map((json) => SaleModel.fromJson(json)).toList();
+          list = (response as List).map((json) => SaleModel.fromJson(json)).toList();
         } catch (_) {
           final response = await client.from('orders').select('*').order('created_at', ascending: false);
-          return (response as List).map((json) => SaleModel.fromJson(json)).toList();
+          list = (response as List).map((json) => SaleModel.fromJson(json)).toList();
+        }
+        if (list.isNotEmpty) {
+          _inMemorySales = list;
+          return list;
         }
       }
     } catch (e) {
@@ -593,7 +585,11 @@ class SupabaseService {
               .select('*')
               .order('created_at', ascending: false);
         }
-        return (response as List).map((json) => ExpenseModel.fromJson(json)).toList();
+        final list = (response as List).map((json) => ExpenseModel.fromJson(json)).toList();
+        if (list.isNotEmpty) {
+          _inMemoryExpenses = list;
+        }
+        return list;
       }
     } catch (e) {
       debugPrint('Supabase fetchExpenses error: $e');
@@ -933,54 +929,19 @@ class SupabaseService {
         try {
           final response = await client.from('employees').select('*').order('created_at', ascending: false);
           final list = (response as List).map((json) => StaffModel.fromJson(json)).toList();
-          if (list.isNotEmpty) {
-            _inMemoryStaff = list;
-            return list;
-          }
-
-          // If employees table is empty, auto-seed the default 2 employees
-          debugPrint('Supabase employees table is empty. Auto-seeding initial staff records...');
-          final defaultStaffPayloads = [
-            {
-              'name': 'করিম হোসেন',
-              'phone': '01711223344',
-              'designation': 'ম্যানেজার ও সেলসম্যান',
-              'role': 'Manager',
-              'base_salary': 18000,
-              'pending_salary': 18000,
-              'created_at': '2025-01-01T00:00:00.000Z'
-            },
-            {
-              'name': 'রাফি ইসলাম',
-              'phone': '01899887766',
-              'designation': 'সহকারী বিক্রয়কর্মী',
-              'role': 'Assistant',
-              'base_salary': 12000,
-              'pending_salary': 12000,
-              'created_at': '2025-06-15T00:00:00.000Z'
-            },
-          ];
-
-          try {
-            await client.from('employees').insert(defaultStaffPayloads);
-            final seededResponse = await client.from('employees').select('*').order('created_at', ascending: false);
-            final seededList = (seededResponse as List).map((json) => StaffModel.fromJson(json)).toList();
-            if (seededList.isNotEmpty) {
-              _inMemoryStaff = seededList;
-              return seededList;
-            }
-          } catch (eSeeding) {
-            debugPrint('Supabase auto-seeding employees error: $eSeeding');
-          }
+          _inMemoryStaff = list;
+          return list;
         } catch (e) {
           debugPrint('Supabase fetchStaff on employees table failed, trying staff table: $e');
         }
 
-        final responseStaff = await client.from('staff').select('*').order('name', ascending: true);
-        final listStaff = (responseStaff as List).map((json) => StaffModel.fromJson(json)).toList();
-        if (listStaff.isNotEmpty) {
+        try {
+          final responseStaff = await client.from('staff').select('*').order('name', ascending: true);
+          final listStaff = (responseStaff as List).map((json) => StaffModel.fromJson(json)).toList();
           _inMemoryStaff = listStaff;
           return listStaff;
+        } catch (e2) {
+          debugPrint('Supabase fetchStaff on staff table failed: $e2');
         }
       }
     } catch (e) {
@@ -993,32 +954,34 @@ class SupabaseService {
     try {
       final client = _client;
       if (client != null) {
+        final payload = staff.toEmployeeJson();
+        dynamic response;
         try {
-          final payload = staff.toEmployeeJson();
-          final response = await client.from('employees').insert(payload).select().single();
-          final newStaff = StaffModel.fromJson(response);
-          _inMemoryStaff.insert(0, newStaff);
-          return newStaff;
+          response = await client.from('employees').insert(payload).select().single();
         } catch (e) {
-          debugPrint('Supabase addStaff on employees error, fallback to staff: $e');
+          debugPrint('Supabase addStaff insert error, retrying without join_date: $e');
+          final fallback = Map<String, dynamic>.from(payload)..remove('join_date');
           try {
+            response = await client.from('employees').insert(fallback).select().single();
+          } catch (e2) {
+            debugPrint('Supabase addStaff on employees error, fallback to staff: $e2');
             final fallbackPayload = staff.toJson();
             if (fallbackPayload['id'] != null && fallbackPayload['id'].toString().startsWith('st_')) {
               fallbackPayload.remove('id');
             }
-            final responseStaff = await client.from('staff').insert(fallbackPayload).select().single();
-            final newStaff = StaffModel.fromJson(responseStaff);
-            _inMemoryStaff.insert(0, newStaff);
-            return newStaff;
-          } catch (e2) {
-            debugPrint('Supabase addStaff fallback error: $e2');
-            rethrow;
+            try {
+              response = await client.from('staff').insert(fallbackPayload).select().single();
+            } catch (_) {}
           }
+        }
+        if (response != null) {
+          final newStaff = StaffModel.fromJson(response);
+          _inMemoryStaff.insert(0, newStaff);
+          return newStaff;
         }
       }
     } catch (e) {
       debugPrint('Supabase addStaff error: $e');
-      rethrow;
     }
     _inMemoryStaff.insert(0, staff);
     return staff;
@@ -1032,9 +995,16 @@ class SupabaseService {
     try {
       final client = _client;
       if (client != null && staff.id != null) {
+        final payload = staff.toEmployeeJson();
         try {
-          await client.from('employees').update(staff.toEmployeeJson()).eq('id', staff.id);
-        } catch (_) {}
+          await client.from('employees').update(payload).eq('id', staff.id);
+        } catch (e) {
+          debugPrint('Supabase updateStaff employees error, retrying without join_date: $e');
+          final safePayload = Map<String, dynamic>.from(payload)..remove('join_date');
+          try {
+            await client.from('employees').update(safePayload).eq('id', staff.id);
+          } catch (_) {}
+        }
         try {
           await client.from('staff').update(staff.toJson()).eq('id', staff.id);
         } catch (_) {}
@@ -1049,7 +1019,12 @@ class SupabaseService {
       final client = _client;
       if (client != null) {
         final response = await client.from('salary_payments').select('*').order('created_at', ascending: false);
-        return (response as List).map((json) => SalaryPaymentModel.fromJson(json)).toList();
+        final list = (response as List).map((json) => SalaryPaymentModel.fromJson(json)).toList();
+        if (list.isNotEmpty) {
+          _inMemorySalaryPayments.clear();
+          _inMemorySalaryPayments.addAll(list);
+        }
+        return list;
       }
     } catch (e) {
       debugPrint('Supabase fetchSalaryPayments error: $e');
@@ -1110,7 +1085,12 @@ class SupabaseService {
             .from('due_collections')
             .select('*')
             .order('created_at', ascending: false);
-        return (response as List).map((json) => DueCollectionModel.fromJson(json)).toList();
+        final list = (response as List).map((json) => DueCollectionModel.fromJson(json)).toList();
+        if (list.isNotEmpty) {
+          _inMemoryDueCollections.clear();
+          _inMemoryDueCollections.addAll(list);
+        }
+        return list;
       }
     } catch (e) {
       debugPrint('Supabase fetchDueCollections error: $e');

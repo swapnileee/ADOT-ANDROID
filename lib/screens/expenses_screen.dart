@@ -14,7 +14,7 @@ class ExpensesScreen extends StatefulWidget {
   State<ExpensesScreen> createState() => ExpensesScreenState();
 }
 
-class ExpensesScreenState extends State<ExpensesScreen> {
+class ExpensesScreenState extends State<ExpensesScreen> with AutomaticKeepAliveClientMixin {
   final SupabaseService _supabaseService = SupabaseService();
   final _formKey = GlobalKey<FormState>();
 
@@ -31,6 +31,9 @@ class ExpensesScreenState extends State<ExpensesScreen> {
   String _selectedDateFilter = 'সব'; // 'সব', 'আজ', 'সপ্তাহ', 'মাস', 'কাস্টম'
   DateTimeRange? _customDateRange;
   String? _selectedCategoryFilter;
+
+  @override
+  bool get wantKeepAlive => true;
 
   // Standard Categories Data Structure
   final List<Map<String, dynamic>> _categoriesData = [
@@ -58,6 +61,11 @@ class ExpensesScreenState extends State<ExpensesScreen> {
       'name': 'বেতন',
       'icon': Icons.badge_rounded,
       'color': const Color(0xFFFB8C00), // Orange
+    },
+    {
+      'name': 'দৈনন্দিন নাস্তা খরচ',
+      'icon': Icons.fastfood_rounded,
+      'color': const Color(0xFFD81B60), // Pink/Rose
     },
     {
       'name': 'অন্যান্য',
@@ -94,7 +102,9 @@ class ExpensesScreenState extends State<ExpensesScreen> {
   }
 
   Future<void> _loadExpenses() async {
-    setState(() => _isLoading = true);
+    if (_expenses.isEmpty) {
+      setState(() => _isLoading = true);
+    }
     try {
       final expenses = await _supabaseService.fetchExpenses();
       if (!mounted) return;
@@ -128,6 +138,9 @@ class ExpensesScreenState extends State<ExpensesScreen> {
     }
     if (lower.contains('বেতন') || lower.contains('মজুরি') || lower.contains('कर्मচারী') || lower.contains('salary') || lower.contains('staff')) {
       return 'বেতন';
+    }
+    if (lower.contains('নাস্তা') || lower.contains('খাবার') || lower.contains('টিফিন') || lower.contains('চা') || lower.contains('বিস্কুট') || lower.contains('snack') || lower.contains('tea') || lower.contains('food')) {
+      return 'দৈনন্দিন নাস্তা খরচ';
     }
     return 'অন্যান্য';
   }
@@ -206,6 +219,7 @@ class ExpensesScreenState extends State<ExpensesScreen> {
       'দোকান ভাড়া': 0.0,
       'মালামাল': 0.0,
       'বেতন': 0.0,
+      'দৈনন্দিন নাস্তা খরচ': 0.0,
       'অন্যান্য': 0.0,
     };
 
@@ -474,6 +488,7 @@ class ExpensesScreenState extends State<ExpensesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final dateFormat = DateFormat('dd MMM yyyy, hh:mm a');
     final filteredList = _filteredExpenses;
     final categoryTotalsMap = _categoryTotals;

@@ -3,6 +3,7 @@ import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../config/app_constants.dart';
 import '../models/product_model.dart';
 import '../services/supabase_service.dart';
+import '../services/refresh_signal.dart';
 import '../widgets/custom_snackbar.dart';
 import '../theme/app_theme.dart';
 
@@ -191,6 +192,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         CustomSnackBar.showSuccess(context, 'নতুন পণ্য সফলভাবে সংরক্ষিত হয়েছে!');
       }
 
+      RefreshSignal().notifyDataChanged();
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
@@ -424,16 +426,27 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: primaryDarkGreen),
                   ),
                 ),
-                TextButton.icon(
-                  onPressed: () => _addVariantRow(),
-                  style: TextButton.styleFrom(
-                    foregroundColor: primaryDarkGreen,
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  ),
-                  icon: const Icon(Icons.add_circle_outline, size: 18),
-                  label: const Text(
-                    '+ ভ্যারিয়েন্ট যোগ করুন',
-                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+                InkWell(
+                  onTap: () => _addVariantRow(),
+                  borderRadius: BorderRadius.circular(8),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Icon(Icons.add_circle_outline, size: 16, color: primaryDarkGreen),
+                        SizedBox(width: 4),
+                        Text(
+                          'ভ্যারিয়েন্ট যোগ করুন',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: primaryDarkGreen,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],

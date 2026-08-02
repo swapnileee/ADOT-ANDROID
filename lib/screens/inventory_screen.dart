@@ -16,7 +16,7 @@ class InventoryScreen extends StatefulWidget {
   State<InventoryScreen> createState() => InventoryScreenState();
 }
 
-class InventoryScreenState extends State<InventoryScreen> {
+class InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAliveClientMixin {
   final SupabaseService _supabaseService = SupabaseService();
 
   List<Product> _products = [];
@@ -27,6 +27,9 @@ class InventoryScreenState extends State<InventoryScreen> {
   bool _isLoading = true;
 
   final List<String> _categoryFilters = AppConstants.defaultCategories;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -52,7 +55,9 @@ class InventoryScreenState extends State<InventoryScreen> {
   }
 
   Future<void> _loadProducts() async {
-    setState(() => _isLoading = true);
+    if (_products.isEmpty) {
+      setState(() => _isLoading = true);
+    }
     try {
       final products = await _supabaseService.fetchProducts();
       if (!mounted) return;
@@ -258,6 +263,7 @@ class InventoryScreenState extends State<InventoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       backgroundColor: AppTheme.creamBg,
       appBar: AppBar(

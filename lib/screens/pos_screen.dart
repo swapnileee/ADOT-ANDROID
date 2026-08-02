@@ -32,7 +32,7 @@ class POSScreen extends StatefulWidget {
   State<POSScreen> createState() => POSScreenState();
 }
 
-class POSScreenState extends State<POSScreen> {
+class POSScreenState extends State<POSScreen> with AutomaticKeepAliveClientMixin {
   final SupabaseService _supabaseService = SupabaseService();
   final _checkoutFormKey = GlobalKey<FormState>();
 
@@ -64,13 +64,28 @@ class POSScreenState extends State<POSScreen> {
   ];
 
   @override
+  bool get wantKeepAlive => true;
+
+  @override
   void initState() {
     super.initState();
+    RefreshSignal().addListener(_onRefreshSignal);
+    _loadProducts();
+  }
+
+  void _onRefreshSignal() {
+    if (mounted) {
+      _loadProducts();
+    }
+  }
+
+  void refreshData() {
     _loadProducts();
   }
 
   @override
   void dispose() {
+    RefreshSignal().removeListener(_onRefreshSignal);
     _customerNameController.dispose();
     _customerPhoneController.dispose();
     _paidAmountController.dispose();
@@ -78,7 +93,9 @@ class POSScreenState extends State<POSScreen> {
   }
 
   Future<void> _loadProducts() async {
-    setState(() => _isLoadingProducts = true);
+    if (_products.isEmpty) {
+      setState(() => _isLoadingProducts = true);
+    }
     try {
       final products = await _supabaseService.fetchProducts();
       if (!mounted) return;
@@ -372,10 +389,6 @@ class POSScreenState extends State<POSScreen> {
     );
   }
 
-  void refreshData() {
-    _loadProducts();
-  }
-
   Future<void> _submitCheckout() async {
     if (_cartItems.isEmpty) {
       CustomSnackBar.showWarning(
@@ -582,6 +595,7 @@ class POSScreenState extends State<POSScreen> {
                   Navigator.pop(dialogContext);
                 }
                 _loadProducts();
+                RefreshSignal().notifyDataChanged();
               }
             },
             child: const Text('সংরক্ষণ'),
@@ -1125,6 +1139,7 @@ class POSScreenState extends State<POSScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       backgroundColor: AppTheme.creamBg,
       appBar: AppBar(

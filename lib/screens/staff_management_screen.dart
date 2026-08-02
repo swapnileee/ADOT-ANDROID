@@ -4,8 +4,10 @@ import 'package:intl/intl.dart';
 import '../models/staff_model.dart';
 import '../models/salary_payment_model.dart';
 import '../services/supabase_service.dart';
+import '../services/refresh_signal.dart';
 import '../theme/app_theme.dart';
 import '../widgets/custom_snackbar.dart';
+import '../widgets/pay_salary_sheet.dart';
 
 class StaffManagementScreen extends StatefulWidget {
   const StaffManagementScreen({super.key});
@@ -14,7 +16,7 @@ class StaffManagementScreen extends StatefulWidget {
   State<StaffManagementScreen> createState() => _StaffManagementScreenState();
 }
 
-class _StaffManagementScreenState extends State<StaffManagementScreen> {
+class _StaffManagementScreenState extends State<StaffManagementScreen> with AutomaticKeepAliveClientMixin {
   final SupabaseService _supabaseService = SupabaseService();
 
   List<StaffModel> _staffList = [];
@@ -23,13 +25,27 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
   String _selectedFilter = 'সকল'; // 'সকল', 'সক্রিয়', 'নিষ্ক্রিয়'
 
   @override
+  bool get wantKeepAlive => true;
+
+  @override
   void initState() {
     super.initState();
-    _loadData();
+    final cachedS = _supabaseService.cachedStaff;
+    final cachedP = _supabaseService.cachedSalaryPayments;
+
+    if (cachedS.isNotEmpty || cachedP.isNotEmpty) {
+      _staffList = List.from(cachedS);
+      _salaryPayments = List.from(cachedP);
+      _isLoading = false;
+    } else {
+      _loadData();
+    }
   }
 
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadData({bool showLoading = false}) async {
+    if (showLoading || (_staffList.isEmpty && _salaryPayments.isEmpty)) {
+      setState(() => _isLoading = true);
+    }
     try {
       final staff = await _supabaseService.fetchStaff();
       final payments = await _supabaseService.fetchSalaryPayments();
@@ -62,14 +78,29 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
         .fold(0.0, (sum, s) => sum + s.monthlySalary);
   }
 
-  int get _unpaidCurrentMonthCount {
-    final currentMonthYear = DateFormat('MMMM yyyy').format(DateTime.now());
-    final paidStaffIds = _salaryPayments
-        .where((p) => p.monthYear.trim().toLowerCase() == currentMonthYear.trim().toLowerCase())
-        .map((p) => p.staffId)
-        .toSet();
+  List<String> _getUnpaidMonthsForStaff(StaffModel staff) {
+    final now = DateTime.now();
+    if (staff.joinDate.year > now.year ||
+        (staff.joinDate.year == now.year && staff.joinDate.month >= now.month)) {
+      return [];
+    }
 
-    return _staffList.where((s) => s.isActive && !paidStaffIds.contains(s.id.toString())).length;
+    final List<String> unpaid = [];
+    DateTime current = DateTime(staff.joinDate.year, staff.joinDate.month, 1);
+    final DateTime limit = DateTime(now.year, now.month, 1);
+
+    while (!current.isAfter(limit)) {
+      final monthStr = DateFormat('MMMM yyyy').format(current);
+      if (!_isSalaryPaidForMonth(staff.id.toString(), monthStr)) {
+        unpaid.add(monthStr);
+      }
+      current = DateTime(current.year, current.month + 1, 1);
+    }
+    return unpaid;
+  }
+
+  int get _unpaidCurrentMonthCount {
+    return _staffList.where((s) => s.isActive && _getUnpaidMonthsForStaff(s).isNotEmpty).length;
   }
 
   bool _isSalaryPaidForMonth(String staffId, String monthYear) {
@@ -369,19 +400,6 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
   }
 
   void _showPaySalaryModal(StaffModel staff) {
-    final formKey = GlobalKey<FormState>();
-    final currentMonthYear = DateFormat('MMMM yyyy').format(DateTime.now());
-    final prevMonthYear = DateFormat('MMMM yyyy').format(DateTime.now().subtract(const Duration(days: 30)));
-    final nextMonthYear = DateFormat('MMMM yyyy').format(DateTime.now().add(const Duration(days: 30)));
-
-    final List<String> monthOptions = [prevMonthYear, currentMonthYear, nextMonthYear];
-    String selectedMonthYear = currentMonthYear;
-
-    final amountController = TextEditingController(text: staff.monthlySalary.toStringAsFixed(0));
-    final notesController = TextEditingController();
-    bool addAsExpense = true;
-    bool isSubmitting = false;
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -390,232 +408,18 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            final isAlreadyPaid = _isSalaryPaidForMonth(staff.id.toString(), selectedMonthYear);
-
-            return SafeArea(
-              top: false,
-              child: Padding(
-                padding: EdgeInsets.only(
-                  top: 20,
-                  left: 16,
-                  right: 16,
-                  bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-                ),
-                child: SingleChildScrollView(
-                child: Form(
-                  key: formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(Icons.payments_outlined, color: AppTheme.primaryGreen),
-                              const SizedBox(width: 8),
-                              Text(
-                                '${staff.name}-কে বেতন প্রদান',
-                                style: const TextStyle(
-                                    fontSize: 17, fontWeight: FontWeight.bold, color: AppTheme.primaryGreen),
-                              ),
-                            ],
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.close),
-                            onPressed: () => Navigator.pop(context),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-
-                      if (isAlreadyPaid)
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          margin: const EdgeInsets.only(bottom: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.shade50,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.orange.shade300),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.info_outline, color: AppTheme.warningOrange, size: 20),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  '$selectedMonthYear মাসের বেতন ইতোমধ্যে প্রদান করা হয়েছে!',
-                                  style: const TextStyle(fontSize: 12, color: AppTheme.warningOrange, fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                      // Month Dropdown
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedMonthYear,
-                        decoration: InputDecoration(
-                          labelText: 'বেতনের মাস ও বছর *',
-                          prefixIcon: const Icon(Icons.calendar_month, color: AppTheme.primaryGreen),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        items: monthOptions.map((m) {
-                          return DropdownMenuItem(value: m, child: Text(m));
-                        }).toList(),
-                        onChanged: (val) {
-                          if (val != null) {
-                            setModalState(() => selectedMonthYear = val);
-                          }
-                        },
-                      ),
-
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: amountController,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        decoration: InputDecoration(
-                          labelText: 'প্রদত্ত টাকার পরিমাণ (৳) *',
-                          prefixText: '৳ ',
-                          prefixIcon: const Icon(Icons.money_rounded, color: AppTheme.primaryGreen),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        validator: (val) {
-                          if (val == null || val.trim().isEmpty) return 'টাকার পরিমাণ লিখুন';
-                          if (double.tryParse(val.trim()) == null) return 'সঠিক সংখ্যা লিখুন';
-                          return null;
-                        },
-                      ),
-
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: notesController,
-                        decoration: InputDecoration(
-                          labelText: 'নোট / বিবরণ (ঐচ্ছিক)',
-                          hintText: 'যেমন: অগ্রিম / বোনাস',
-                          prefixIcon: const Icon(Icons.notes_rounded, color: AppTheme.primaryGreen),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                      ),
-
-                      const SizedBox(height: 12),
-                      CheckboxListTile(
-                        value: addAsExpense,
-                        activeColor: AppTheme.primaryGreen,
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text(
-                          'দোকানের খরচে (Expense Tracker) অন্তর্ভুক্ত করুন',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                        ),
-                        onChanged: (val) => setModalState(() => addAsExpense = val ?? true),
-                      ),
-
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 48,
-                        child: ElevatedButton(
-                              onPressed: isSubmitting
-                                  ? null
-                                  : () async {
-                                      if (!formKey.currentState!.validate()) return;
-                                      setModalState(() => isSubmitting = true);
-
-                                      final nav = Navigator.of(context);
-                                      final messenger = ScaffoldMessenger.of(context);
-
-                                      try {
-                                        final amount = double.parse(amountController.text.trim());
-                                        final payment = SalaryPaymentModel(
-                                          staffId: staff.id.toString(),
-                                          staffName: staff.name,
-                                          amountPaid: amount,
-                                          paymentDate: DateTime.now(),
-                                          monthYear: selectedMonthYear,
-                                          notes: notesController.text.trim().isNotEmpty
-                                              ? notesController.text.trim()
-                                              : null,
-                                          createdAt: DateTime.now(),
-                                        );
-
-                                        await _supabaseService.processSalaryPayment(
-                                          payment: payment,
-                                          addAsExpense: addAsExpense,
-                                        );
-
-                                        if (!mounted) return;
-                                        nav.pop();
-                                        messenger.showSnackBar(
-                                          SnackBar(
-                                            content: Row(
-                                              children: [
-                                                const Icon(Icons.check_circle_rounded, color: Colors.white),
-                                                const SizedBox(width: 12),
-                                                Expanded(
-                                                  child: Text(
-                                                    '$selectedMonthYear মাসের বেতন প্রদান সম্পন্ন হয়েছে!',
-                                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                            backgroundColor: const Color(0xFF1E4D3B),
-                                            behavior: SnackBarBehavior.floating,
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                            margin: const EdgeInsets.all(16),
-                                            duration: const Duration(seconds: 3),
-                                          ),
-                                        );
-                                        _loadData();
-                                      } catch (e) {
-                                        if (!mounted) return;
-                                        messenger.showSnackBar(
-                                          SnackBar(
-                                            content: Row(
-                                              children: [
-                                                const Icon(Icons.error_outline_rounded, color: Colors.white),
-                                                const SizedBox(width: 12),
-                                                Expanded(
-                                                  child: Text(
-                                                    'বেতন প্রদান করতে সমস্যা হয়েছে: $e',
-                                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                            backgroundColor: const Color(0xFFD32F2F),
-                                            behavior: SnackBarBehavior.floating,
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                            margin: const EdgeInsets.all(16),
-                                            duration: const Duration(seconds: 4),
-                                          ),
-                                        );
-                                      } finally {
-                                        setModalState(() => isSubmitting = false);
-                                      }
-                                    },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.primaryGreen,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          child: isSubmitting
-                              ? const SpinKitThreeBounce(color: Colors.white, size: 20)
-                              : const Text(
-                                  'বেতন নিশ্চিত করুন',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
-                                ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
+        return PaySalarySheet(
+          staff: staff,
+          salaryPayments: _salaryPayments,
+          onPaymentSubmit: ({required payment, required addAsExpense}) async {
+            await _supabaseService.processSalaryPayment(
+              payment: payment,
+              addAsExpense: addAsExpense,
+            );
+            RefreshSignal().notifyDataChanged();
+            if (!mounted) return;
+            _loadData();
+          },
         );
       },
     );
@@ -698,6 +502,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       backgroundColor: AppTheme.creamBg,
       appBar: AppBar(
@@ -869,8 +674,42 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
   }
 
   Widget _buildStaffCard(StaffModel staff) {
-    final currentMonthYear = DateFormat('MMMM yyyy').format(DateTime.now());
-    final isPaidThisMonth = _isSalaryPaidForMonth(staff.id.toString(), currentMonthYear);
+    final now = DateTime.now();
+    final isJoinedInCurrentMonth = staff.joinDate.year > now.year ||
+        (staff.joinDate.year == now.year && staff.joinDate.month >= now.month);
+    final unpaidMonths = _getUnpaidMonthsForStaff(staff);
+
+    Color badgeBgColor;
+    Color badgeBorderColor;
+    Color badgeTextColor;
+    IconData badgeIcon;
+    String badgeText;
+
+    if (isJoinedInCurrentMonth) {
+      badgeBgColor = const Color(0xFFE3F2FD);
+      badgeBorderColor = const Color(0xFF90CAF9);
+      badgeTextColor = const Color(0xFF1565C0);
+      badgeIcon = Icons.info_outline;
+      badgeText = 'নতুন কর্মী (চলতি মাস)';
+    } else if (unpaidMonths.isEmpty) {
+      badgeBgColor = Colors.green.shade50;
+      badgeBorderColor = Colors.green.shade200;
+      badgeTextColor = Colors.green.shade700;
+      badgeIcon = Icons.check_circle_outline;
+      badgeText = 'সব বেতন পরিশোধিত';
+    } else if (unpaidMonths.length == 1) {
+      badgeBgColor = Colors.orange.shade50;
+      badgeBorderColor = Colors.orange.shade200;
+      badgeTextColor = AppTheme.warningOrange;
+      badgeIcon = Icons.error_outline_rounded;
+      badgeText = '${unpaidMonths.first}: বেতন বাকি';
+    } else {
+      badgeBgColor = Colors.orange.shade50;
+      badgeBorderColor = Colors.orange.shade200;
+      badgeTextColor = AppTheme.warningOrange;
+      badgeIcon = Icons.error_outline_rounded;
+      badgeText = '${unpaidMonths.length} মাসের বেতন বাকি';
+    }
 
     return Card(
       elevation: 0,
@@ -949,24 +788,24 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: isPaidThisMonth ? Colors.green.shade50 : Colors.orange.shade50,
+                    color: badgeBgColor,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: isPaidThisMonth ? Colors.green.shade200 : Colors.orange.shade200),
+                    border: Border.all(color: badgeBorderColor),
                   ),
                   child: Row(
                     children: [
                       Icon(
-                        isPaidThisMonth ? Icons.check_circle_outline : Icons.error_outline_rounded,
+                        badgeIcon,
                         size: 14,
-                        color: isPaidThisMonth ? Colors.green.shade700 : AppTheme.warningOrange,
+                        color: badgeTextColor,
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        isPaidThisMonth ? '$currentMonthYear: পরিশোধিত' : '$currentMonthYear: বেতন বাকি',
+                        badgeText,
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          color: isPaidThisMonth ? Colors.green.shade700 : AppTheme.warningOrange,
+                          color: badgeTextColor,
                         ),
                       ),
                     ],

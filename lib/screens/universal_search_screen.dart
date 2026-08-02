@@ -1,14 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../services/supabase_service.dart';
 import '../models/product_model.dart';
 import '../models/sale_model.dart';
 import '../models/expense_model.dart';
-import '../widgets/custom_snackbar.dart';
 import '../theme/app_theme.dart';
 
 class UniversalSearchScreen extends StatefulWidget {
-  const UniversalSearchScreen({super.key});
+  final List<ProductModel>? initialProducts;
+  final List<SaleModel>? initialSales;
+  final List<ExpenseModel>? initialExpenses;
+
+  const UniversalSearchScreen({
+    super.key,
+    this.initialProducts,
+    this.initialSales,
+    this.initialExpenses,
+  });
 
   @override
   State<UniversalSearchScreen> createState() => _UniversalSearchScreenState();
@@ -26,42 +33,22 @@ class _UniversalSearchScreenState extends State<UniversalSearchScreen> {
   List<SaleModel> _matchingSales = [];
   List<ExpenseModel> _matchingExpenses = [];
 
-  bool _isLoading = true;
   String _query = '';
   int _selectedFilter = 0; // 0: All, 1: Products, 2: Sales, 3: Expenses
 
   @override
   void initState() {
     super.initState();
-    _loadAllData();
+    _allProducts = List.from(widget.initialProducts ?? _supabaseService.cachedProducts);
+    _allSales = List.from(widget.initialSales ?? _supabaseService.cachedSales);
+    _allExpenses = List.from(widget.initialExpenses ?? _supabaseService.cachedExpenses);
+    _performSearch();
   }
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadAllData() async {
-    setState(() => _isLoading = true);
-    try {
-      final products = await _supabaseService.fetchProducts();
-      final sales = await _supabaseService.fetchSales();
-      final expenses = await _supabaseService.fetchExpenses();
-
-      if (!mounted) return;
-      setState(() {
-        _allProducts = products;
-        _allSales = sales;
-        _allExpenses = expenses;
-        _isLoading = false;
-        _performSearch();
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      CustomSnackBar.showError(context, 'ডাটা লোড করতে ব্যর্থ: $e');
-    }
   }
 
   void _performSearch() {
@@ -95,14 +82,7 @@ class _UniversalSearchScreenState extends State<UniversalSearchScreen> {
         title: const Text('সর্বজনীন অনুসন্ধান (Universal Search)'),
       ),
       body: SafeArea(
-        child: _isLoading
-            ? const Center(
-                child: SpinKitFadingCube(
-                  color: AppTheme.primaryGreen,
-                  size: 40.0,
-                ),
-              )
-            : Column(
+        child: Column(
                 children: [
                   // Search Input Field
                   Padding(
