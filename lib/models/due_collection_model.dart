@@ -22,8 +22,8 @@ class DueCollectionModel {
           ? (json['amount'] as num).toDouble()
           : double.tryParse(json['amount']?.toString() ?? '0') ?? 0.0,
       createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+          ? (DateTime.tryParse(json['created_at'].toString())?.toLocal() ?? DateTime.now().toLocal())
+          : DateTime.now().toLocal(),
     );
   }
 

@@ -509,9 +509,11 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> with Auto
         backgroundColor: AppTheme.primaryGreen,
         foregroundColor: Colors.white,
         elevation: 0,
+        centerTitle: true,
         title: const Text(
           'কর্মচারী ব্যবস্থাপনা',
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          textAlign: TextAlign.center,
         ),
         actions: [
           IconButton(

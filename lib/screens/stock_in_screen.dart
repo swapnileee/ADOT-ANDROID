@@ -442,9 +442,11 @@ class _StockInScreenState extends State<StockInScreen> with AutomaticKeepAliveCl
           backgroundColor: AppTheme.primaryGreen,
           foregroundColor: Colors.white,
           elevation: 0,
+          centerTitle: true,
           title: const Text(
             'ক্রয় / স্টক ইন',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            textAlign: TextAlign.center,
           ),
           bottom: const TabBar(
             indicatorColor: Colors.white,

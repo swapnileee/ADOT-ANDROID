@@ -152,9 +152,11 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
             icon: const Icon(Icons.arrow_back, color: Colors.white),
             onPressed: _popWithResult,
           ),
+          centerTitle: true,
           title: const Text(
             'নোটিফিকেশন সেন্টার',
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+            textAlign: TextAlign.center,
           ),
           actions: [
             Stack(

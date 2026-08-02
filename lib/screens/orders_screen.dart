@@ -47,8 +47,8 @@ class OrdersScreenState extends State<OrdersScreen> with AutomaticKeepAliveClien
     super.dispose();
   }
 
-  Future<void> _loadSalesData() async {
-    if (_allSales.isEmpty) {
+  Future<void> _loadSalesData({bool isManual = false}) async {
+    if (isManual || _allSales.isEmpty) {
       setState(() => _isLoading = true);
     }
     try {
@@ -58,6 +58,9 @@ class OrdersScreenState extends State<OrdersScreen> with AutomaticKeepAliveClien
         _allSales = sales;
         _isLoading = false;
       });
+      if (isManual) {
+        CustomSnackBar.showSuccess(context, 'অর্ডারের তথ্য আপডেট করা হয়েছে');
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -80,18 +83,23 @@ class OrdersScreenState extends State<OrdersScreen> with AutomaticKeepAliveClien
     final filteredList = _filteredSales;
 
     return Scaffold(
-      backgroundColor: AppTheme.creamBg,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: const Text('অর্ডার ও ক্যাশমেমো হিসেব'),
+        centerTitle: true,
+        title: const Text(
+          'অর্ডার ও ক্যাশমেমো হিসেব',
+          textAlign: TextAlign.center,
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
-            onPressed: _loadSalesData,
+            onPressed: () => _loadSalesData(isManual: true),
             tooltip: 'রিফ্রেশ',
           ),
         ],
       ),
       body: SafeArea(
+        bottom: false,
         child: _isLoading
             ? const Center(
                 child: SpinKitFadingCube(
@@ -100,10 +108,10 @@ class OrdersScreenState extends State<OrdersScreen> with AutomaticKeepAliveClien
                 ),
               )
             : RefreshIndicator(
-                onRefresh: _loadSalesData,
+                onRefresh: () => _loadSalesData(isManual: true),
                 color: AppTheme.primaryGreen,
                 child: ListView(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 100.0),
                   children: [
                     // Banner Card
                     Container(

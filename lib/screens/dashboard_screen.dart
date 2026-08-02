@@ -16,17 +16,28 @@ import 'dues_screen.dart';
 import 'stock_in_screen.dart';
 import 'staff_management_screen.dart';
 import 'notification_center_screen.dart';
+import 'expenses_screen.dart';
+import 'net_profit_breakdown_screen.dart';
+import 'cash_in_hand_breakdown_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final VoidCallback onNavigateToPOS;
   final VoidCallback onNavigateToInventory;
   final VoidCallback? onNavigateToOrders;
+  final VoidCallback? onNavigateToExpenses;
+  final VoidCallback? onNavigateToCashInHand;
+  final VoidCallback? onNavigateToNetProfit;
+  final Function(int)? onNavigateToTab;
 
   const DashboardScreen({
     super.key,
     required this.onNavigateToPOS,
     required this.onNavigateToInventory,
     this.onNavigateToOrders,
+    this.onNavigateToExpenses,
+    this.onNavigateToCashInHand,
+    this.onNavigateToNetProfit,
+    this.onNavigateToTab,
   });
 
   // Brand Palette Constants
@@ -67,6 +78,10 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
   // Yesterday's sales fetched directly from Supabase with UTC-converted BD bounds
   double _yesterdaySales = 0.0;
   DateTime _lastLoadedDate = DateTime.now();
+  DateTime _lastFetchTime = DateTime.now(); // Guards resumed auto-refresh
+  // Tracks the previous lifecycle state to distinguish true background resume
+  // from transient overlays (notification panel, volume popup, etc.)
+  AppLifecycleState? _previousLifecycleState;
 
   // Midnight Auto-Refresh Timer State
   Timer? _midnightTimer;
@@ -110,6 +125,7 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
   @override
   void dispose() {
     _midnightTimer?.cancel();
+    RefreshSignal().removeListener(_onRefreshSignal);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -117,12 +133,27 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      final now = DateTime.now();
-      if (now.day != _lastLoadedDate.day || now.month != _lastLoadedDate.month || now.year != _lastLoadedDate.year) {
-        _resetTodayState();
+      // Only refresh if we truly returned from the background (paused).
+      // Notification panel / volume overlay: inactive → resumed (NO paused step)
+      // Real app switch:                      paused  → resumed
+      // This single check eliminates all spurious notification-panel flickers.
+      if (_previousLifecycleState == AppLifecycleState.paused) {
+        final now = DateTime.now();
+        final dateChanged = now.day != _lastLoadedDate.day ||
+            now.month != _lastLoadedDate.month ||
+            now.year != _lastLoadedDate.year;
+        final dataStale = now.difference(_lastFetchTime).inMinutes >= 5;
+
+        if (dateChanged) {
+          _resetTodayState();
+          _loadDashboardData();
+        } else if (dataStale) {
+          _loadDashboardData();
+        }
+        // Fresh data + same day: instant resume, no reload
       }
-      _loadDashboardData();
     }
+    _previousLifecycleState = state;
   }
 
   void _resetTodayState() {
@@ -143,7 +174,7 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
   }
 
   double get _cashInHand {
-    final net = _todayPaidSales + _todayDueCollected - _todayExpenses;
+    final net = (_todayPaidSales + _todayDueCollected) - _todayExpenses;
     return net > 0 ? net : 0.0;
   }
 
@@ -328,17 +359,18 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
         if (p.totalStock <= 0) outCount++;
       }
 
-      // Calculate BD Reference Dates (device-independent UTC construct with +6h offset)
-      final DateTime nowBD = DateTime.now().toUtc().add(const Duration(hours: 6));
-      final DateTime startOfTodayBD = DateTime.utc(nowBD.year, nowBD.month, nowBD.day);
-      final DateTime startOfYesterdayBD = startOfTodayBD.subtract(const Duration(days: 1));
+      // Calculate Strict Local Calendar Day Boundaries (00:00:00 to 23:59:59)
+      final now = DateTime.now();
+      final localStartOfDay = DateTime(now.year, now.month, now.day, 0, 0, 0);
+      final localEndOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59, 999);
+      final startOfYesterday = localStartOfDay.subtract(const Duration(days: 1));
 
       // Direct sales paid amount today from sales list
       double computedTodayPaidSales = 0.0;
       for (var sale in sales) {
         if (sale.createdAt != null) {
-          final saleDateBD = sale.createdAt!.toUtc().add(const Duration(hours: 6));
-          if (!saleDateBD.isBefore(startOfTodayBD)) {
+          final saleDate = sale.createdAt!.toLocal();
+          if (!saleDate.isBefore(localStartOfDay) && !saleDate.isAfter(localEndOfDay)) {
             computedTodayPaidSales += sale.paidAmount;
           }
         }
@@ -347,8 +379,8 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
       // Due collections / repayments collected today
       double computedTodayDueCollected = 0.0;
       for (var col in dueCollections) {
-        final colDateBD = col.createdAt.toUtc().add(const Duration(hours: 6));
-        if (!colDateBD.isBefore(startOfTodayBD)) {
+        final colDate = col.createdAt.toLocal();
+        if (!colDate.isBefore(localStartOfDay) && !colDate.isAfter(localEndOfDay)) {
           computedTodayDueCollected += col.amount;
         }
       }
@@ -361,10 +393,10 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
       for (var exp in expenses) {
         final expDate = (exp.expenseDate ?? exp.createdAt);
         if (expDate != null) {
-          final expDateBD = expDate.toUtc().add(const Duration(hours: 6));
-          if (!expDateBD.isBefore(startOfTodayBD)) {
+          final expDateLocal = expDate.toLocal();
+          if (!expDateLocal.isBefore(localStartOfDay) && !expDateLocal.isAfter(localEndOfDay)) {
             computedTodayExpenses += exp.amount;
-          } else if (!expDateBD.isBefore(startOfYesterdayBD) && expDateBD.isBefore(startOfTodayBD)) {
+          } else if (!expDateLocal.isBefore(startOfYesterday) && expDateLocal.isBefore(localStartOfDay)) {
             computedYesterdayExpenses += exp.amount;
           }
         }
@@ -386,16 +418,16 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
 
       for (var sale in sales) {
         if (sale.createdAt != null) {
-          final saleDateBD = sale.createdAt!.toUtc().add(const Duration(hours: 6));
+          final saleDate = sale.createdAt!.toLocal();
           final key = sale.productName.trim().toLowerCase();
           final unitCost = productBuyingPrices[key] ?? (sale.totalPrice * 0.70);
           final saleCogs = sale.quantity * unitCost;
 
-          if (!saleDateBD.isBefore(startOfTodayBD)) {
+          if (!saleDate.isBefore(localStartOfDay)) {
             if (computedTodayCogs == 0.0) {
               computedTodayCogs += saleCogs;
             }
-          } else if (!saleDateBD.isBefore(startOfYesterdayBD) && saleDateBD.isBefore(startOfTodayBD)) {
+          } else if (!saleDate.isBefore(startOfYesterday) && saleDate.isBefore(localStartOfDay)) {
             computedYesterdayCogs += saleCogs;
           }
         }
@@ -407,7 +439,7 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
 
       final netProfitToday = finalTodaySales - computedTodayCogs - computedTodayExpenses;
       final netProfitYesterday = realYesterdaySales - computedYesterdayCogs - computedYesterdayExpenses;
-      final updatedTimeText = DateFormat('hh:mm a').format(nowBD);
+      final updatedTimeText = DateFormat('hh:mm a').format(now);
 
       if (!mounted) return;
       setState(() {
@@ -438,6 +470,7 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
         // Store yesterday's sales for comparison in the main card
         _yesterdaySales = realYesterdaySales;
         _isLoading = false;
+        _lastFetchTime = DateTime.now(); // Stamp successful fetch time
       });
     } catch (e) {
       if (!mounted) return;
@@ -709,7 +742,7 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
 
                           // 8. INVENTORY SUMMARY
                           _buildInventorySummaryCard(),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 120),
                         ],
                       ),
                     ),
@@ -1045,44 +1078,155 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
       mainAxisSpacing: 10,
       childAspectRatio: 1.65,
       children: [
-        _buildSecondaryCard('নিট লাভ', '৳ ${_todayNetProfit.toStringAsFixed(0)}', profitSubtext, Icons.trending_up, const Color(0xFF2E7D32)),
-        _buildSecondaryCard('মোট খরচ', '৳ ${_todayExpenses.toStringAsFixed(0)}', expenseSubtext, Icons.trending_down, const Color(0xFFD32F2F)),
-        _buildSecondaryCard('হাতে নগদ', '৳ ${_cashInHand.toStringAsFixed(0)}', cashSubtext, Icons.account_balance_wallet_outlined, const Color(0xFF1565C0)),
-        _buildSecondaryCard('বকেয়া আদায়যোগ্য', '৳ ${_totalDue.toStringAsFixed(0)}', 'গ্রাহকের নিকট মোট বকেয়া', Icons.receipt_outlined, const Color(0xFFEF6C00)),
+        _buildSecondaryCard(
+          'নিট লাভ',
+          '৳ ${_todayNetProfit.toStringAsFixed(0)}',
+          profitSubtext,
+          Icons.trending_up,
+          const Color(0xFF2E7D32),
+          onTap: () {
+            if (widget.onNavigateToNetProfit != null) {
+              widget.onNavigateToNetProfit!();
+            } else {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => NetProfitBreakdownScreen(
+                    onSelectTab: widget.onNavigateToTab,
+                  ),
+                ),
+              ).then((_) => _loadDashboardData());
+            }
+          },
+        ),
+        _buildSecondaryCard(
+          'মোট খরচ',
+          '৳ ${_todayExpenses.toStringAsFixed(0)}',
+          expenseSubtext,
+          Icons.trending_down,
+          const Color(0xFFD32F2F),
+          onTap: () {
+            if (widget.onNavigateToExpenses != null) {
+              widget.onNavigateToExpenses!();
+            } else {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ExpensesScreen()),
+              ).then((_) => _loadDashboardData());
+            }
+          },
+        ),
+        _buildSecondaryCard(
+          'হাতে নগদ',
+          '৳ ${_cashInHand.toStringAsFixed(0)}',
+          cashSubtext,
+          Icons.account_balance_wallet_outlined,
+          const Color(0xFF1565C0),
+          onTap: () {
+            if (widget.onNavigateToCashInHand != null) {
+              widget.onNavigateToCashInHand!();
+            } else {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => CashInHandBreakdownScreen(
+                    onSelectTab: widget.onNavigateToTab,
+                  ),
+                ),
+              ).then((_) => _loadDashboardData());
+            }
+          },
+        ),
+        _buildSecondaryCard(
+          'বকেয়া আদায়যোগ্য',
+          '৳ ${_totalDue.toStringAsFixed(0)}',
+          'গ্রাহকের নিকট মোট বকেয়া',
+          Icons.receipt_outlined,
+          const Color(0xFFEF6C00),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const DuesScreen()),
+            ).then((_) => _loadDashboardData());
+          },
+        ),
       ],
     );
   }
 
-  Widget _buildSecondaryCard(String title, String amount, String sub, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 8)],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Row(
+  Widget _buildSecondaryCard(
+    String title,
+    String amount,
+    String sub,
+    IconData icon,
+    Color color, {
+    VoidCallback? onTap,
+  }) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 8,
+              )
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
-                child: Icon(icon, size: 16, color: color),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, size: 16, color: color),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.black54,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Icon(Icons.chevron_right_rounded, size: 14, color: Colors.grey.shade400),
+                ],
               ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(title, style: const TextStyle(fontSize: 12, color: Colors.black54, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 6),
+              Text(
+                amount,
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                sub,
+                style: const TextStyle(fontSize: 9, color: Colors.black38),
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          Text(amount, style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: color)),
-          const SizedBox(height: 4),
-          Text(sub, style: const TextStyle(fontSize: 9, color: Colors.black38), overflow: TextOverflow.ellipsis),
-        ],
+        ),
       ),
     );
   }

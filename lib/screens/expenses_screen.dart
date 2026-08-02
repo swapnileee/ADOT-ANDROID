@@ -101,8 +101,8 @@ class ExpensesScreenState extends State<ExpensesScreen> with AutomaticKeepAliveC
     super.dispose();
   }
 
-  Future<void> _loadExpenses() async {
-    if (_expenses.isEmpty) {
+  Future<void> _loadExpenses({bool isManual = false}) async {
+    if (isManual || _expenses.isEmpty) {
       setState(() => _isLoading = true);
     }
     try {
@@ -112,6 +112,9 @@ class ExpensesScreenState extends State<ExpensesScreen> with AutomaticKeepAliveC
         _expenses = expenses;
         _isLoading = false;
       });
+      if (isManual) {
+        CustomSnackBar.showSuccess(context, 'খরচের তথ্য আপডেট করা হয়েছে');
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -494,38 +497,38 @@ class ExpensesScreenState extends State<ExpensesScreen> with AutomaticKeepAliveC
     final categoryTotalsMap = _categoryTotals;
 
     return Scaffold(
-      backgroundColor: AppTheme.creamBg,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         backgroundColor: AppTheme.primaryGreen,
         foregroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.menu_rounded),
-          onPressed: () => Scaffold.of(context).openDrawer(),
-          tooltip: 'মেনু খুলুন',
-        ),
+        leading: ModalRoute.of(context)?.canPop == true
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+                tooltip: 'পেছনে যান',
+              )
+            : IconButton(
+                icon: const Icon(Icons.menu_rounded, color: Colors.white),
+                onPressed: () => Scaffold.of(context).openDrawer(),
+                tooltip: 'মেনু খুলুন',
+              ),
+        centerTitle: true,
         title: const Text(
           'দৈনন্দিন খরচ (Expenses)',
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          textAlign: TextAlign.center,
         ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
-            onPressed: _loadExpenses,
+            onPressed: () => _loadExpenses(isManual: true),
             tooltip: 'রিফ্রেশ করুন',
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showAddExpenseModal,
-        backgroundColor: AppTheme.primaryGreen,
-        icon: const Icon(Icons.add_rounded, color: Colors.white),
-        label: const Text(
-          'নতুন খরচ',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-      ),
       body: SafeArea(
+        bottom: false,
         child: _isLoading
             ? const Center(
                 child: SpinKitFadingCube(
@@ -534,7 +537,7 @@ class ExpensesScreenState extends State<ExpensesScreen> with AutomaticKeepAliveC
                 ),
               )
             : RefreshIndicator(
-                onRefresh: _loadExpenses,
+                onRefresh: () => _loadExpenses(isManual: true),
                 color: AppTheme.primaryGreen,
                 child: Column(
                   children: [
@@ -632,31 +635,62 @@ class ExpensesScreenState extends State<ExpensesScreen> with AutomaticKeepAliveC
                       ),
                     ),
 
-                    // 3. SEARCH BAR
+                    // 3. SEARCH BAR & COMPACT ACTION BUTTON ROW
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
-                      child: TextField(
-                        controller: _searchController,
-                        onChanged: (_) => setState(() {}),
-                        decoration: InputDecoration(
-                          hintText: 'বিবরণ বা নোট দিয়ে খরচ খুঁজুন...',
-                          prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.primaryGreen),
-                          suffixIcon: _searchController.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.clear_rounded, size: 18),
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    setState(() {});
-                                  },
-                                )
-                              : null,
-                          filled: true,
-                          fillColor: Colors.white,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide.none,
-                          ),
+                      child: SizedBox(
+                        height: 46,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _searchController,
+                                onChanged: (_) => setState(() {}),
+                                style: const TextStyle(fontSize: 13),
+                                decoration: InputDecoration(
+                                  hintText: 'বিবরণ বা নোট দিয়ে খরচ খুঁজুন...',
+                                  hintStyle: const TextStyle(fontSize: 12),
+                                  prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.primaryGreen, size: 20),
+                                  suffixIcon: _searchController.text.isNotEmpty
+                                      ? IconButton(
+                                          icon: const Icon(Icons.clear_rounded, size: 18),
+                                          onPressed: () {
+                                            _searchController.clear();
+                                            setState(() {});
+                                          },
+                                        )
+                                      : null,
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              height: 46,
+                              child: ElevatedButton.icon(
+                                onPressed: _showAddExpenseModal,
+                                icon: const Icon(Icons.add_rounded, color: Colors.white, size: 16),
+                                label: const Text(
+                                  'নতুন খরচ',
+                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12.5),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF0B4D2C),
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -782,7 +816,7 @@ class ExpensesScreenState extends State<ExpensesScreen> with AutomaticKeepAliveC
                               ),
                             )
                           : ListView.builder(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                              padding: const EdgeInsets.fromLTRB(16, 6, 16, 100),
                               itemCount: filteredList.length,
                               itemBuilder: (context, index) {
                                 final exp = filteredList[index];

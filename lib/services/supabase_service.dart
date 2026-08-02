@@ -659,10 +659,10 @@ class SupabaseService {
     double totalCogs = 0.0;
     int dueCustomers = 0;
 
-    final DateTime nowBD = DateTime.now().toUtc().add(const Duration(hours: 6));
-    final DateTime startOfTodayBD = DateTime.utc(nowBD.year, nowBD.month, nowBD.day);
-    final String startOfTodayUtcStr = startOfTodayBD.subtract(const Duration(hours: 6)).toIso8601String();
-    final String nowUtcStr = DateTime.now().toUtc().toIso8601String();
+    final now = DateTime.now();
+    final localStartOfDay = DateTime(now.year, now.month, now.day);
+    final startOfTodayUtcStr = localStartOfDay.toUtc().toIso8601String();
+    final nowUtcStr = DateTime.now().toUtc().toIso8601String();
 
     try {
       final client = _client;
@@ -1086,10 +1086,8 @@ class SupabaseService {
             .select('*')
             .order('created_at', ascending: false);
         final list = (response as List).map((json) => DueCollectionModel.fromJson(json)).toList();
-        if (list.isNotEmpty) {
-          _inMemoryDueCollections.clear();
-          _inMemoryDueCollections.addAll(list);
-        }
+        _inMemoryDueCollections.clear();
+        _inMemoryDueCollections.addAll(list);
         return list;
       }
     } catch (e) {

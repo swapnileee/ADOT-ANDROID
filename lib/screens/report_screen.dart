@@ -320,7 +320,22 @@ class _ReportScreenState extends State<ReportScreen> {
     return Scaffold(
       backgroundColor: AppTheme.creamBg,
       appBar: AppBar(
-        title: const Text('সেলস ও হিসাব রিপোর্ট'),
+        leading: ModalRoute.of(context)?.canPop == true
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => Navigator.pop(context),
+                tooltip: 'পেছনে যান',
+              )
+            : IconButton(
+                icon: const Icon(Icons.menu_rounded),
+                onPressed: () => Scaffold.of(context).openDrawer(),
+                tooltip: 'মেনু খুলুন',
+              ),
+        centerTitle: true,
+        title: const Text(
+          'সেলস ও হিসাব রিপোর্ট',
+          textAlign: TextAlign.center,
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded),

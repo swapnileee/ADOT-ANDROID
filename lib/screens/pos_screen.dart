@@ -92,8 +92,8 @@ class POSScreenState extends State<POSScreen> with AutomaticKeepAliveClientMixin
     super.dispose();
   }
 
-  Future<void> _loadProducts() async {
-    if (_products.isEmpty) {
+  Future<void> _loadProducts({bool isManual = false}) async {
+    if (isManual || _products.isEmpty) {
       setState(() => _isLoadingProducts = true);
     }
     try {
@@ -104,6 +104,9 @@ class POSScreenState extends State<POSScreen> with AutomaticKeepAliveClientMixin
         _applySearch();
         _isLoadingProducts = false;
       });
+      if (isManual) {
+        CustomSnackBar.showSuccess(context, 'পণ্য তালিকা আপডেট করা হয়েছে');
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoadingProducts = false);
@@ -1141,7 +1144,7 @@ class POSScreenState extends State<POSScreen> with AutomaticKeepAliveClientMixin
   Widget build(BuildContext context) {
     super.build(context);
     return Scaffold(
-      backgroundColor: AppTheme.creamBg,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.menu_rounded),
@@ -1152,7 +1155,7 @@ class POSScreenState extends State<POSScreen> with AutomaticKeepAliveClientMixin
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
-            onPressed: _loadProducts,
+            onPressed: () => _loadProducts(isManual: true),
             tooltip: 'রিফ্রেশ',
           ),
         ],
@@ -1161,6 +1164,7 @@ class POSScreenState extends State<POSScreen> with AutomaticKeepAliveClientMixin
           ? SafeArea(child: _buildFloatingCartBar())
           : null,
       body: SafeArea(
+        bottom: false,
         child: _isLoadingProducts
             ? const Center(
                 child: SpinKitFadingCube(
@@ -1169,7 +1173,7 @@ class POSScreenState extends State<POSScreen> with AutomaticKeepAliveClientMixin
                 ),
               )
             : SingleChildScrollView(
-                padding: const EdgeInsets.only(bottom: 20),
+                padding: const EdgeInsets.only(bottom: 100),
                 child: _buildProductGridSection(),
               ),
       ),

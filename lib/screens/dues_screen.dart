@@ -713,20 +713,32 @@ class _DuesScreenState extends State<DuesScreen> with AutomaticKeepAliveClientMi
       appBar: AppBar(
         backgroundColor: primaryDarkGreen,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
+        leading: ModalRoute.of(context)?.canPop == true
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+                tooltip: 'পেছনে যান',
+              )
+            : IconButton(
+                icon: const Icon(Icons.menu_rounded, color: Colors.white),
+                onPressed: () => Scaffold.of(context).openDrawer(),
+                tooltip: 'মেনু খুলুন',
+              ),
+        centerTitle: true,
         title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Text(
               'বকেয়া খাতা',
               style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+              textAlign: TextAlign.center,
             ),
+            SizedBox(height: 2),
             Text(
               '(Due Management)',
-              style: TextStyle(color: Colors.white70, fontSize: 11),
+              style: TextStyle(color: Colors.white70, fontSize: 12),
+              textAlign: TextAlign.center,
             ),
           ],
         ),

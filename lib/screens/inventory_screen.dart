@@ -54,8 +54,8 @@ class InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAliv
     super.dispose();
   }
 
-  Future<void> _loadProducts() async {
-    if (_products.isEmpty) {
+  Future<void> _loadProducts({bool isManual = false}) async {
+    if (isManual || _products.isEmpty) {
       setState(() => _isLoading = true);
     }
     try {
@@ -66,6 +66,9 @@ class InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAliv
         _applyFilters();
         _isLoading = false;
       });
+      if (isManual) {
+        CustomSnackBar.showSuccess(context, 'পণ্য ও স্টকের তথ্য আপডেট করা হয়েছে');
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -265,28 +268,48 @@ class InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAliv
   Widget build(BuildContext context) {
     super.build(context);
     return Scaffold(
-      backgroundColor: AppTheme.creamBg,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.menu_rounded),
           onPressed: () => Scaffold.of(context).openDrawer(),
           tooltip: 'মেনু খুলুন',
         ),
-        title: const Text('পণ্য সমূহ'),
+        centerTitle: true,
+        title: const Text(
+          'পণ্য সমূহ',
+          textAlign: TextAlign.center,
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
-            onPressed: _loadProducts,
+            onPressed: () => _loadProducts(isManual: true),
             tooltip: 'রিফ্রেশ',
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _openAddProductScreen(),
-        backgroundColor: AppTheme.primaryGreen,
-        child: const Icon(Icons.add, color: Colors.white, size: 28),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 76.0, right: 4.0),
+        child: SizedBox(
+          width: 50,
+          height: 50,
+          child: FloatingActionButton(
+            onPressed: () => _openAddProductScreen(),
+            backgroundColor: const Color(0xFF0B4D2C),
+            elevation: 4,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(
+              Icons.add_rounded,
+              color: Colors.white,
+              size: 26,
+            ),
+          ),
+        ),
       ),
       body: SafeArea(
+        bottom: false,
         child: _isLoading
             ? const Center(
                 child: SpinKitFadingCube(
@@ -295,7 +318,7 @@ class InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAliv
                 ),
               )
             : RefreshIndicator(
-                onRefresh: _loadProducts,
+                onRefresh: () => _loadProducts(isManual: true),
                 color: AppTheme.primaryGreen,
                 child: Column(
                   children: [
@@ -408,7 +431,7 @@ class InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAliv
                               ),
                             )
                           : ListView.builder(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                              padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
                               itemCount: _filteredProducts.length,
                               itemBuilder: (context, index) {
                                 final product = _filteredProducts[index];

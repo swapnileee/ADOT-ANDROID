@@ -103,7 +103,11 @@ class _LowStockScreenState extends State<LowStockScreen> {
     return Scaffold(
       backgroundColor: AppTheme.creamBg,
       appBar: AppBar(
-        title: const Text('কম স্টকের অ্যালার্ট (Low Stock)'),
+        centerTitle: true,
+        title: const Text(
+          'কম স্টকের অ্যালার্ট (Low Stock)',
+          textAlign: TextAlign.center,
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
