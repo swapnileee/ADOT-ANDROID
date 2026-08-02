@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import '../lib/models/staff_model.dart';
+import 'package:adot_shop_app/models/staff_model.dart';
 
 void main() {
   group('StaffModel Joining Date & Smart Salary Due Tests', () {
