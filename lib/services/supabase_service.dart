@@ -7,6 +7,7 @@ import '../models/purchase_model.dart';
 import '../models/staff_model.dart';
 import '../models/salary_payment_model.dart';
 import '../models/due_collection_model.dart';
+import 'refresh_signal.dart';
 
 class SupabaseService {
   SupabaseClient? get _client {
@@ -177,16 +178,9 @@ class SupabaseService {
     try {
       final client = _client;
       if (client != null) {
-        final response = await client.from('products').select('*').order('name', ascending: true);
+        final response = await client.from('products').select('*').order('id', ascending: true);
         final list = (response as List).map((json) => Product.fromJson(json)).toList();
         if (list.isNotEmpty) {
-          for (var p in list) {
-            if ((p.name.contains('গাওয়া ঘি') || p.name.contains('ঘি')) && p.category != 'ঘি') {
-              try {
-                await client.from('products').update({'category': 'ঘি'}).eq('id', p.id);
-              } catch (_) {}
-            }
-          }
           _inMemoryProducts = list;
           return list;
         }
@@ -202,26 +196,100 @@ class SupabaseService {
     try {
       final client = _client;
       if (client != null) {
-        await client.from('products').insert(product.toJson());
+        await client.from('products').insert(product.toDatabaseJson());
       }
     } catch (e) {
       debugPrint('Supabase addProduct error: $e');
     }
   }
 
-  Future<void> updateProduct(Product product) async {
-    final index = _inMemoryProducts.indexWhere((p) => p.id == product.id);
+  Future<bool> updateProduct(Product product) async {
+    final index = _inMemoryProducts.indexWhere((p) => p.id.toString() == product.id.toString());
     if (index >= 0) {
       _inMemoryProducts[index] = product;
     }
     try {
       final client = _client;
       if (client != null) {
-        await client.from('products').update(product.toJson()).eq('id', product.id);
+        final Map<String, dynamic> updatePayload = {
+          'name': product.name,
+          'category': product.category,
+          'buying_price': product.buyingPrice,
+          'selling_price': product.sellingPrice,
+          'stock_quantity': product.stockQuantity,
+        };
+
+        if (product.baseUnit.isNotEmpty) {
+          updatePayload['base_unit'] = product.baseUnit;
+        }
+        if (product.supplier.isNotEmpty) {
+          updatePayload['supplier'] = product.supplier;
+        }
+        if (product.imageUrl.isNotEmpty) {
+          updatePayload['image_url'] = product.imageUrl;
+        }
+        if (product.variants.isNotEmpty) {
+          updatePayload['variants'] = product.variants.map((v) => v.toJson()).toList();
+        }
+
+        final parsedId = int.tryParse(product.id.toString());
+        final targetId = parsedId ?? product.id;
+
+        await client.from('products').update(updatePayload).eq('id', targetId);
+        debugPrint('SUCCESS SUPABASE UPDATE PRODUCT: $targetId (${product.name})');
+        RefreshSignal().notifyDataChanged();
+        return true;
+      }
+    } on PostgrestException catch (pe) {
+      debugPrint('🚨 Supabase PostgrestException updating product (${pe.code}): ${pe.message}');
+      rethrow;
+    } catch (e, stack) {
+      debugPrint('🚨 Error updating product in Supabase: $e');
+      debugPrint('$stack');
+      rethrow;
+    }
+    return false;
+  }
+
+  Future<bool> updateProductFields({
+    required dynamic id,
+    required String name,
+    required String category,
+    required double buyingPrice,
+    required double sellingPrice,
+    required int stockQuantity,
+  }) async {
+    try {
+      final client = _client;
+      if (client != null) {
+        final parsedId = int.tryParse(id.toString());
+        final targetId = parsedId ?? id;
+
+        final Map<String, dynamic> updatePayload = {
+          'name': name,
+          'category': category,
+          'buying_price': buyingPrice,
+          'selling_price': sellingPrice,
+          'stock_quantity': stockQuantity,
+        };
+
+        await client.from('products').update(updatePayload).eq('id', targetId);
+
+        final index = _inMemoryProducts.indexWhere((p) => p.id.toString() == id.toString());
+        if (index >= 0) {
+          final old = _inMemoryProducts[index];
+          _inMemoryProducts[index] = old.copyWith(
+            name: name,
+            category: category,
+          );
+        }
+        RefreshSignal().notifyDataChanged();
+        return true;
       }
     } catch (e) {
-      debugPrint('Supabase updateProduct error: $e');
+      debugPrint('Error updating product fields in Supabase: $e');
     }
+    return false;
   }
 
   Future<void> updateProductStock(dynamic productId, num newStockInBaseUnit) async {
@@ -1096,27 +1164,90 @@ class SupabaseService {
     return _inMemoryDueCollections;
   }
 
+  Future<double> fetchTodayDueCollectionsTotal() async {
+    try {
+      final client = _client;
+      if (client != null) {
+        final now = DateTime.now();
+        final startOfTodayIso = DateTime(now.year, now.month, now.day).toUtc().toIso8601String();
+        final response = await client
+            .from('due_collections')
+            .select('amount, created_at')
+            .gte('created_at', startOfTodayIso);
+
+        double total = 0.0;
+        final list = response as List;
+        for (var item in list) {
+          total += ((item['amount'] as num?)?.toDouble() ?? 0.0);
+        }
+        return total;
+      }
+    } catch (e) {
+      debugPrint('fetchTodayDueCollectionsTotal error: $e');
+    }
+
+    final now = DateTime.now();
+    final localStartOfDay = DateTime(now.year, now.month, now.day, 0, 0, 0);
+    double sum = 0.0;
+    for (var col in _inMemoryDueCollections) {
+      final colDate = col.createdAt.toLocal();
+      if (!colDate.isBefore(localStartOfDay)) {
+        sum += col.amount;
+      }
+    }
+    return sum;
+  }
+
   Future<void> recordDueCollection({
     required String customerName,
     required double amount,
     String? saleId,
+    String? customerPhone,
+    String? notes,
   }) async {
+    final nowUtc = DateTime.now().toUtc();
     final entry = DueCollectionModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       saleId: saleId,
       customerName: customerName,
+      customerPhone: customerPhone,
       amount: amount,
-      createdAt: DateTime.now(),
+      notes: notes ?? 'Due Collection',
+      createdAt: nowUtc.toLocal(),
     );
     _inMemoryDueCollections.insert(0, entry);
 
     try {
       final client = _client;
       if (client != null) {
-        await client.from('due_collections').insert(entry.toJson());
+        final Map<String, dynamic> insertData = {
+          'customer_name': customerName,
+          'customer_phone': customerPhone ?? '',
+          'amount': amount,
+          'notes': notes ?? 'Due Collection',
+          'created_at': nowUtc.toIso8601String(),
+        };
+
+        if (saleId != null && saleId.isNotEmpty) {
+          final parsedInt = int.tryParse(saleId);
+          if (parsedInt != null) {
+            insertData['sale_id'] = parsedInt;
+          } else {
+            insertData['sale_id'] = saleId;
+          }
+        }
+
+        try {
+          await client.from('due_collections').insert(insertData);
+        } catch (err) {
+          debugPrint('First insert attempt to due_collections failed: $err. Retrying without sale_id...');
+          insertData.remove('sale_id');
+          await client.from('due_collections').insert(insertData);
+        }
       }
     } catch (e) {
-      debugPrint('Supabase recordDueCollection error (fallback to in-memory): $e');
+      debugPrint('Supabase recordDueCollection error: $e');
     }
+    RefreshSignal().notifyDataChanged();
   }
 }

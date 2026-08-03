@@ -289,11 +289,12 @@ class InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAliv
         ],
       ),
       floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 76.0, right: 4.0),
+        padding: const EdgeInsets.only(bottom: 90.0, right: 8.0),
         child: SizedBox(
-          width: 50,
-          height: 50,
+          width: 52,
+          height: 52,
           child: FloatingActionButton(
+            heroTag: 'add_product_fab',
             onPressed: () => _openAddProductScreen(),
             backgroundColor: const Color(0xFF0B4D2C),
             elevation: 4,
@@ -303,7 +304,7 @@ class InventoryScreenState extends State<InventoryScreen> with AutomaticKeepAliv
             child: const Icon(
               Icons.add_rounded,
               color: Colors.white,
-              size: 26,
+              size: 28,
             ),
           ),
         ),

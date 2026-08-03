@@ -46,6 +46,7 @@ class _CashInHandBreakdownScreenState extends State<CashInHandBreakdownScreen> {
   double _cashPurchases = 0.0;
   double _expensesPaid = 0.0;
   int _dueColCount = 0;
+  double _yesterdayCashInHand = 0.0;
 
   @override
   void initState() {
@@ -168,6 +169,44 @@ class _CashInHandBreakdownScreenState extends State<CashInHandBreakdownScreen> {
       }
     }
 
+    final startOfYesterdayBD = startOfTodayBD.subtract(const Duration(hours: 24));
+    double yPaidSales = 0.0;
+    for (var s in _allSales) {
+      if (s.createdAt != null) {
+        final sDate = s.createdAt!.toLocal();
+        if (!sDate.isBefore(startOfYesterdayBD) && sDate.isBefore(startOfTodayBD)) {
+          yPaidSales += s.paidAmount;
+        }
+      }
+    }
+    double yDueCol = 0.0;
+    for (var c in _allDueCollections) {
+      final cDate = c.createdAt.toLocal();
+      if (!cDate.isBefore(startOfYesterdayBD) && cDate.isBefore(startOfTodayBD)) {
+        yDueCol += c.amount;
+      }
+    }
+    double yExp = 0.0;
+    for (var e in _allExpenses) {
+      final eDate = (e.expenseDate ?? e.createdAt);
+      if (eDate != null) {
+        final eLocal = eDate.toLocal();
+        if (!eLocal.isBefore(startOfYesterdayBD) && eLocal.isBefore(startOfTodayBD)) {
+          yExp += e.amount;
+        }
+      }
+    }
+    double yPur = 0.0;
+    for (var p in _allPurchases) {
+      if (p.createdAt != null) {
+        final pLocal = p.createdAt!.toLocal();
+        if (!pLocal.isBefore(startOfYesterdayBD) && pLocal.isBefore(startOfTodayBD)) {
+          yPur += p.totalCost;
+        }
+      }
+    }
+    final double calcYesterdayCash = (yPaidSales + yDueCol) - (yExp + yPur);
+
     setState(() {
       _directPaidSales = paidSalesSum;
       _cashSalesSum = cSalesSum;
@@ -180,6 +219,7 @@ class _CashInHandBreakdownScreenState extends State<CashInHandBreakdownScreen> {
       _expensesPaid = expSum;
       _cashPurchases = purchaseSum;
       _dueColCount = colCount;
+      _yesterdayCashInHand = calcYesterdayCash > 0 ? calcYesterdayCash : 0.0;
       _isLoading = false;
     });
   }
@@ -191,7 +231,7 @@ class _CashInHandBreakdownScreenState extends State<CashInHandBreakdownScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.creamBg,
+      backgroundColor: Colors.transparent,
       drawer: AppDrawer(
         currentTab: 0,
         onSelectTab: (tabIndex) {
@@ -243,6 +283,7 @@ class _CashInHandBreakdownScreenState extends State<CashInHandBreakdownScreen> {
         ],
       ),
       body: SafeArea(
+        bottom: false,
         child: _isLoading
             ? const Center(
                 child: SpinKitFadingCube(
@@ -254,7 +295,7 @@ class _CashInHandBreakdownScreenState extends State<CashInHandBreakdownScreen> {
                 onRefresh: _loadData,
                 color: const Color(0xFF1565C0),
                 child: ListView(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 100.0),
                   children: [
                     // 1. Filter Chips Row (Instant Local Filtering)
                     SingleChildScrollView(
@@ -382,6 +423,23 @@ class _CashInHandBreakdownScreenState extends State<CashInHandBreakdownScreen> {
                                     child: Text(
                                       'খরচ: -৳ ${_totalOutflow.toStringAsFixed(0)}',
                                       style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.18),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 0.8),
+                                    ),
+                                    child: Text(
+                                      'গতকাল: ৳${_yesterdayCashInHand.toStringAsFixed(0)}',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                     ),
                                   ),
                                 ],

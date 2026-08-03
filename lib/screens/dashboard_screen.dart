@@ -61,7 +61,7 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
   double _todayNetProfit = 0.0;
   double _yesterdayExpenses = 0.0;
   double _yesterdayNetProfit = 0.0;
-  String _lastUpdatedTime = '';
+  double _yesterdayCashInHand = 0.0;
   double _totalDue = 0.0;
   int _totalProducts = 0;
   int _lowStockCount = 0;
@@ -320,6 +320,7 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
       final products = await _supabaseService.fetchProducts();
       final expenses = await _supabaseService.fetchExpenses();
       final dueCollections = await _supabaseService.fetchDueCollections();
+      final todayDueCollectedSum = await _supabaseService.fetchTodayDueCollectionsTotal();
       final staffList = await _supabaseService.fetchStaff();
       final salaryPayments = await _supabaseService.fetchSalaryPayments();
 
@@ -437,9 +438,30 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
       final finalTodaySales = realTodaySales;
       final finalTodayOrderCount = realTodayOrderCount;
 
+      // Calculate Yesterday's Cash-in-Hand
+      double computedYesterdayPaidSales = 0.0;
+      for (var sale in sales) {
+        if (sale.createdAt != null) {
+          final saleDate = sale.createdAt!.toLocal();
+          if (!saleDate.isBefore(startOfYesterday) && saleDate.isBefore(localStartOfDay)) {
+            computedYesterdayPaidSales += sale.paidAmount;
+          }
+        }
+      }
+
+      double computedYesterdayDueCollected = 0.0;
+      for (var col in dueCollections) {
+        final colDate = col.createdAt.toLocal();
+        if (!colDate.isBefore(startOfYesterday) && colDate.isBefore(localStartOfDay)) {
+          computedYesterdayDueCollected += col.amount;
+        }
+      }
+
+      final double calcYesterdayCash = (computedYesterdayPaidSales + computedYesterdayDueCollected) - computedYesterdayExpenses;
+      final double finalYesterdayCashInHand = calcYesterdayCash > 0 ? calcYesterdayCash : 0.0;
+
       final netProfitToday = finalTodaySales - computedTodayCogs - computedTodayExpenses;
       final netProfitYesterday = realYesterdaySales - computedYesterdayCogs - computedYesterdayExpenses;
-      final updatedTimeText = DateFormat('hh:mm a').format(now);
 
       if (!mounted) return;
       setState(() {
@@ -447,12 +469,12 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
         _todayPaidSales = (todayStats['paidSales'] as double? ?? 0.0) > 0
             ? (todayStats['paidSales'] as double)
             : computedTodayPaidSales;
-        _todayDueCollected = computedTodayDueCollected;
+        _todayDueCollected = todayDueCollectedSum > 0 ? todayDueCollectedSum : computedTodayDueCollected;
         _todayExpenses = computedTodayExpenses;
         _todayNetProfit = netProfitToday;
         _yesterdayExpenses = computedYesterdayExpenses;
         _yesterdayNetProfit = netProfitYesterday;
-        _lastUpdatedTime = updatedTimeText;
+        _yesterdayCashInHand = finalYesterdayCashInHand;
         _totalDue = computedTotalDue;
         _totalProducts = products.length;
         _lowStockCount = products.where((p) => p.isLowStock).length;
@@ -1067,8 +1089,6 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
       expenseSubtext = 'গতকালের উপাত্ত নেই';
     }
 
-    String cashSubtext = _lastUpdatedTime.isNotEmpty ? 'আপডেট: আজ $_lastUpdatedTime' : 'আপডেট: আজ';
-
     return GridView.count(
       padding: EdgeInsets.zero,
       crossAxisCount: 2,
@@ -1119,7 +1139,7 @@ class DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObs
         _buildSecondaryCard(
           'হাতে নগদ',
           '৳ ${_cashInHand.toStringAsFixed(0)}',
-          cashSubtext,
+          'গতকাল: ৳ ${_yesterdayCashInHand.toStringAsFixed(0)}',
           Icons.account_balance_wallet_outlined,
           const Color(0xFF1565C0),
           onTap: () {

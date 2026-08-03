@@ -185,7 +185,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
       if (widget.productToEdit != null) {
         await _supabaseService.updateProduct(product);
         if (!mounted) return;
-        CustomSnackBar.showSuccess(context, 'পণ্য সফলভাবে আপডেট করা হয়েছে!');
+        CustomSnackBar.showSuccess(context, 'পণ্য সফলভাবে সংশোধন করা হয়েছে');
       } else {
         await _supabaseService.addProduct(product);
         if (!mounted) return;

@@ -157,7 +157,7 @@ class _NetProfitBreakdownScreenState extends State<NetProfitBreakdownScreen> {
     const deepGreenColor = Color(0xFF0B4D2C);
 
     return Scaffold(
-      backgroundColor: AppTheme.creamBg,
+      backgroundColor: Colors.transparent,
       drawer: AppDrawer(
         currentTab: 0,
         onSelectTab: (tabIndex) {
@@ -209,6 +209,7 @@ class _NetProfitBreakdownScreenState extends State<NetProfitBreakdownScreen> {
         ],
       ),
       body: SafeArea(
+        bottom: false,
         child: _isLoading
             ? const Center(
                 child: SpinKitFadingCube(
@@ -220,7 +221,7 @@ class _NetProfitBreakdownScreenState extends State<NetProfitBreakdownScreen> {
                 onRefresh: _loadData,
                 color: deepGreenColor,
                 child: ListView(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 100.0),
                   children: [
                     // 1. Time Filter Chips Row (Instant Local Filtering)
                     SingleChildScrollView(

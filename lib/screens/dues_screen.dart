@@ -418,6 +418,7 @@ class _DuesScreenState extends State<DuesScreen> with AutomaticKeepAliveClientMi
                             if (selectedMode == 0 && inputVal > 0) {
                               await _supabaseService.recordDueCollection(
                                 customerName: sale.customerName.isEmpty ? 'নগদ কাস্টমার' : sale.customerName,
+                                customerPhone: sale.customerPhone,
                                 amount: inputVal,
                                 saleId: sale.id.toString(),
                               );
